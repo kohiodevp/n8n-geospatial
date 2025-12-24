@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  n8n-geospatial:
+    build: .
+    container_name: n8n-geospatial
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=false
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-random-key-for-dev}
+      - N8N_RUNNERS_MODE=external
+      - N8N_RUNNERS_AUTH_TOKEN=${N8N_RUNNERS_AUTH_TOKEN:-random-auth-token-for-dev}
+      - NODE_FUNCTION_ALLOW_EXTERNAL=* # Important pour les bibliothèques géospatiales
+      - N8N_LOG_LEVEL=info
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_ENABLE_EXECUTE_COMMAND=true
+      - N8N_RUNNERS_ENABLED=false
+      - NODE_FUNCTION_ALLOW_EXTERNAL=axios,lodash,moment
+      - NODES_EXCLUDE=n8n-nodes-base.executeCommand
+    volumes:
+      - ./data:/files
+      - ./geodata:/geodata
+      - ./workflows:/home/node/.n8n/workflows
+    restart: unless-stopped
+    networks:
+      - n8n-network
+
+  # Optionnel : base de données PostgreSQL avec PostGIS pour les opérations géospatiales
+  postgis:
+    image: postgis/postgis:15-3.4
+    container_name: n8n-postgis
+    environment:
+      - POSTGRES_DB=n8n
+      - POSTGRES_USER=n8n
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-n8npassword}
+    volumes:
+      - postgis_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - n8n-network
+
+networks:
+  n8n-network:
+    driver: bridge
+
+volumes:
+  postgis_data:

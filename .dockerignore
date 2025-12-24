@@ -1,0 +1,10 @@
+.git
+.gitignore
+!README.md
+!render.yaml
+Dockerfile
+.dockerignore
+*.md
+.env
+.env.*
+!.env.example
