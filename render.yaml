@@ -43,7 +43,15 @@ services:
       - key: N8N_DIAGNOSTICS_ENABLED
         value: "false"
       - key: NODE_FUNCTION_ALLOW_EXTERNAL
-        value: "*"
+        value: "axios,lodash,moment"
+      - key: N8N_BASIC_AUTH_ACTIVE
+        value: "false"
+      - key: N8N_ENABLE_EXECUTE_COMMAND
+        value: "true"
+      - key: N8N_RUNNERS_ENABLED
+        value: "false"
+      - key: NODES_EXCLUDE
+        value: "n8n-nodes-base.executeCommand"
 databases:
   - name: n8n-db
     plan: free
