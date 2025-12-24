@@ -6,9 +6,6 @@ services:
     plan: starter
     branch: main
     numInstances: 1
-    disk:
-      name: n8n-data
-      sizeGB: 10
     healthCheckPath: /healthz
     envVars:
       - key: N8N_ENCRYPTION_KEY
