@@ -51,4 +51,3 @@ databases:
   - name: n8n-db
     plan: starter
     region: frankfurt
-    postgresqlMajorVersion: 15
