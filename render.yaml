@@ -2,40 +2,53 @@ services:
   - type: web
     name: n8n-geospatial
     env: docker
-    region: frankfurt # optional (defaults to oregon)
-    plan: free # optional (defaults to starter)
-    branch: main # optional (defaults to master)
+    region: frankfurt
+    plan: starter
+    branch: main
     numInstances: 1
+    disk:
+      name: n8n-data
+      sizeGB: 10
     healthCheckPath: /healthz
     envVars:
-#       - key: N8N_RUNNERS_MODE
-#         value: external
-#       - key: N8N_ENCRYPTION_KEY
-#         sync: false
-#       - key: N8N_USER_MANAGEMENT_JWT_SECRET
-#         sync: false
-#       - key: DB_TYPE
-#         value: postgres
-#       - key: DB_POSTGRESDB_HOST
-#         fromDatabase:
-#           name: n8n-db
-#           property: host
-#       - key: DB_POSTGRESDB_PORT
-#         fromDatabase:
-#           name: n8n-db
-#           property: port
-#       - key: DB_POSTGRESDB_USER
-#         fromDatabase:
-#           name: n8n-db
-#           property: user
-#       - key: DB_POSTGRESDB_PASSWORD
-#         fromDatabase:
-#           name: n8n-db
-#           property: password
-#       - key: DB_POSTGRESDB_DATABASE
-#         fromDatabase:
-#           name: n8n-db
-#           property: database
-# databases:
-#   - name: n8n-db
-#     plan: standard
+      - key: N8N_ENCRYPTION_KEY
+        sync: false
+      - key: N8N_USER_MANAGEMENT_JWT_SECRET
+        sync: false
+      - key: N8N_RUNNERS_MODE
+        value: external
+      - key: N8N_RUNNERS_AUTH_TOKEN
+        sync: false
+      - key: DB_TYPE
+        value: postgres
+      - key: DB_POSTGRESDB_HOST
+        fromDatabase:
+          name: n8n-db
+          property: host
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: n8n-db
+          property: port
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: n8n-db
+          property: user
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: n8n-db
+          property: password
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: n8n-db
+          property: database
+      - key: N8N_LOG_LEVEL
+        value: info
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+      - key: NODE_FUNCTION_ALLOW_EXTERNAL
+        value: "*"
+databases:
+  - name: n8n-db
+    plan: starter
+    region: frankfurt
+    postgresqlMajorVersion: 15
