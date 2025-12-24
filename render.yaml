@@ -3,7 +3,7 @@ services:
     name: n8n-geospatial
     env: docker
     region: frankfurt
-    plan: starter
+    plan: free
     branch: main
     numInstances: 1
     healthCheckPath: /healthz
@@ -46,5 +46,5 @@ services:
         value: "*"
 databases:
   - name: n8n-db
-    plan: starter
+    plan: free
     region: frankfurt
