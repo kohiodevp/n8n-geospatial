@@ -42,6 +42,18 @@ services:
         value: fr
       - key: N8N_ENCRYPTION_KEY
         generateValue: true
+      - key: NODE_FUNCTION_ALLOW_EXTERNAL
+        value: axios,lodash,moment
+      - key: NODES_EXCLUDE
+        value: n8n-nodes-base.executeCommand
+      # - key: N8N_RUNNERS_MODE
+      #   value: internal
+      - key: N8N_DIAGNOSTICS_ENABLED
+        value: "false"
+      - key: N8N_ENABLE_EXECUTE_COMMAND
+        value: "true" 
+      # - key: N8N_RUNNERS_AUTH_TOKEN
+      #   generateValue: true
 
 databases:
   - name: n8nDB
