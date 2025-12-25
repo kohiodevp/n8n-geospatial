@@ -12,16 +12,38 @@ services:
       - key: NODE_OPTIONS
         value: --dns-result-order=ipv4first
       
-      # Database - Connection String unique
+      # Database - IMPORTANT: utiliser les bons noms de variables
       - key: DB_TYPE
         value: postgresdb
-      - key: DB_POSTGRESDB_URL
+      - key: DB_POSTGRESDB_HOST
         fromDatabase:
           name: n8nDB
-          property: connectionString
+          property: host
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: n8nDB
+          property: database
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: n8nDB
+          property: port
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: n8nDB
+          property: user
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: n8nDB
+          property: password
+      
+      # AJOUTER cette variable pour forcer l'utilisation des variables ci-dessus
+      - key: DB_POSTGRESDB_SCHEMA
+        value: public
       
       # Server
       - key: PORT
+        value: 5678
+      - key: N8N_PORT
         value: 5678
       - key: N8N_LOG_LEVEL
         value: info
@@ -49,6 +71,10 @@ services:
         value: "false"
       - key: N8N_ENABLE_EXECUTE_COMMAND
         value: "true"
+      
+      # Désactiver les runners
+      - key: N8N_RUNNERS_ENABLED
+        value: "false"
 
 databases:
   - name: n8nDB
