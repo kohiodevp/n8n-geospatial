@@ -12,29 +12,13 @@ services:
       - key: NODE_OPTIONS
         value: --dns-result-order=ipv4first
       
-      # Database
+      # Database - Connection String unique
       - key: DB_TYPE
         value: postgresdb
-      - key: DB_POSTGRESDB_HOST
+      - key: DB_POSTGRESDB_URL
         fromDatabase:
           name: n8nDB
-          property: hostInternal  # Utiliser hostInternal au lieu de host
-      - key: DB_POSTGRESDB_DATABASE
-        fromDatabase:
-          name: n8nDB
-          property: database
-      - key: DB_POSTGRESDB_PORT
-        fromDatabase:
-          name: n8nDB
-          property: port
-      - key: DB_POSTGRESDB_USER
-        fromDatabase:
-          name: n8nDB
-          property: user
-      - key: DB_POSTGRESDB_PASSWORD
-        fromDatabase:
-          name: n8nDB
-          property: password
+          property: connectionString
       
       # Server
       - key: PORT
