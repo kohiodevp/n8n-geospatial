@@ -1,0 +1,156 @@
+{
+  "name": "Instruction Dossier Domanial",
+  "id": "instruction-dossier-domanial-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instruction-dossier",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook",
+      "name": "Réception Demande",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body || {};\nconst reference = 'DOS-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substr(2, 4).toUpperCase();\n\nreturn [{ json: {\n  reference,\n  type_dossier: body.type_dossier || 'autre',\n  demandeur_nom: body.demandeur_nom,\n  demandeur_telephone: body.demandeur_telephone,\n  bien_id: body.bien_id,\n  objet: body.objet || 'Demande non spécifiée',\n  description: body.description,\n  priorite: body.priorite || 'normale',\n  date_reception: new Date().toISOString().slice(0,10)\n}}];"
+      },
+      "id": "preparerDossier",
+      "name": "Préparer Dossier",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traitement.dossiers (reference, type_dossier, demandeur_nom, demandeur_telephone, bien_id, objet, description, priorite, date_reception, statut) VALUES ('{{$json.reference}}', '{{$json.type_dossier}}', '{{$json.demandeur_nom}}', '{{$json.demandeur_telephone}}', {{$json.bien_id || 'NULL'}}, '{{$json.objet}}', '{{$json.description}}', '{{$json.priorite}}', '{{$json.date_reception}}', 'nouveau') RETURNING id, reference;"
+      },
+      "id": "creerDossier",
+      "name": "Créer Dossier DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{
+            "value1": "={{$json.bien_id}}",
+            "operation": "isNotEmpty"
+          }]
+        }
+      },
+      "id": "checkBien",
+      "name": "Bien Associé?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [900, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT b.id, b.reference, b.designation, b.surface, ST_Area(b.geom) as surface_calculee, (SELECT COUNT(*) FROM cadastre.parcelles p WHERE ST_Intersects(p.geom, b.geom)) as nb_parcelles, (SELECT valeur_locative_annuelle FROM domaine.evaluations WHERE bien_id = b.id ORDER BY date_evaluation DESC LIMIT 1) as derniere_valeur_locative FROM domaine.biens b WHERE b.id = {{$json.bien_id}};"
+      },
+      "id": "analyseBien",
+      "name": "Analyser Bien",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1120, 260]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const dossier = $items('Créer Dossier DB')[0].json;\nconst bien = $items('Analyser Bien')[0]?.json || {};\n\nconst analyse = {\n  dossier_reference: dossier.reference,\n  dossier_id: dossier.id,\n  bien_reference: bien.reference || 'N/A',\n  bien_designation: bien.designation || 'N/A',\n  surface: bien.surface || bien.surface_calculee,\n  nb_parcelles: bien.nb_parcelles || 0,\n  valeur_locative: bien.derniere_valeur_locative,\n  eligibilite: bien.nb_parcelles > 0 ? 'eligible' : 'verification_requise',\n  observations: []\n};\n\nif (!bien.reference) analyse.observations.push('Aucun bien associé');\nif (!bien.derniere_valeur_locative) analyse.observations.push('Évaluation requise');\nif (bien.nb_parcelles === 0) analyse.observations.push('Parcelles non identifiées');\n\nreturn [{ json: analyse }];"
+      },
+      "id": "consolidation",
+      "name": "Consolidation Analyse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 260]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE traitement.dossiers SET statut = 'en_instruction', donnees_instruction = '{{JSON.stringify($json)}}'::jsonb WHERE id = {{$json.dossier_id}};"
+      },
+      "id": "majDossier",
+      "name": "MAJ Dossier",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1560, 260]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT traitement.creer_alerte_sms('dossier_urgent', 'Nouveau dossier: ' || '{{$json.dossier_reference}}', 'Dossier reçu pour {{$json.bien_reference}}. Eligibilité: {{$json.eligibilite}}', '{{$items(\"Préparer Dossier\")[0].json.demandeur_telephone}}', '{{$json.eligibilite === \"verification_requise\" ? \"importante\" : \"normale\"}}', {{$json.bien_id || 'NULL'}}) AS alerte_id;"
+      },
+      "id": "alerteSMS",
+      "name": "Envoyer Alerte SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1780, 260]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traitement.logs (workflow_id, execution_id, etape, statut, message, donnees) VALUES ('instruction_dossier', '{{$execution.id}}', 'instruction_complete', 'success', 'Dossier instruit: {{$json.dossier_reference}}', '{{JSON.stringify($json)}}'::jsonb);"
+      },
+      "id": "logResult",
+      "name": "Logger Résultat",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [2000, 360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, reference: $json.dossier_reference, eligibilite: $json.eligibilite, message: 'Dossier créé et en cours d\\'instruction' } }}"
+      },
+      "id": "respond",
+      "name": "Répondre",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2220, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const dossier = $items('Créer Dossier DB')[0].json;\nreturn [{ json: { dossier_reference: dossier.reference, dossier_id: dossier.id, eligibilite: 'sans_bien', observations: ['Dossier sans bien associé'] }}];"
+      },
+      "id": "sansBien",
+      "name": "Dossier Sans Bien",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 460]
+    }
+  ],
+  "connections": {
+    "Réception Demande": { "main": [[{ "node": "Préparer Dossier", "type": "main", "index": 0 }]] },
+    "Préparer Dossier": { "main": [[{ "node": "Créer Dossier DB", "type": "main", "index": 0 }]] },
+    "Créer Dossier DB": { "main": [[{ "node": "Bien Associé?", "type": "main", "index": 0 }]] },
+    "Bien Associé?": { "main": [
+      [{ "node": "Analyser Bien", "type": "main", "index": 0 }],
+      [{ "node": "Dossier Sans Bien", "type": "main", "index": 0 }]
+    ]},
+    "Analyser Bien": { "main": [[{ "node": "Consolidation Analyse", "type": "main", "index": 0 }]] },
+    "Consolidation Analyse": { "main": [[{ "node": "MAJ Dossier", "type": "main", "index": 0 }]] },
+    "MAJ Dossier": { "main": [[{ "node": "Envoyer Alerte SMS", "type": "main", "index": 0 }]] },
+    "Envoyer Alerte SMS": { "main": [[{ "node": "Logger Résultat", "type": "main", "index": 0 }]] },
+    "Logger Résultat": { "main": [[{ "node": "Répondre", "type": "main", "index": 0 }]] },
+    "Dossier Sans Bien": { "main": [[{ "node": "Logger Résultat", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

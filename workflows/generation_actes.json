@@ -1,0 +1,146 @@
+{
+  "name": "Génération Actes Administratifs",
+  "id": "generation-actes-administratifs-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generer-acte",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook",
+      "name": "Demande Acte",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const body = $input.first().json.body || {};\nconst typeActe = body.type_acte || 'attestation';\nconst bienId = body.bien_id;\nconst parametres = body.parametres || {};\n\nreturn [{ json: { type_acte: typeActe, bien_id: bienId, ...parametres, date_generation: new Date().toISOString().slice(0,10) }}];"
+      },
+      "id": "parseRequest",
+      "name": "Parser Demande",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT b.id, b.reference, b.designation, b.adresse, b.code_commune, b.surface, b.valeur_venale, b.date_acquisition, b.origine_propriete, b.affectation, b.gestionnaire, (SELECT valeur_locative_annuelle FROM domaine.evaluations WHERE bien_id = b.id ORDER BY date_evaluation DESC LIMIT 1) as valeur_locative, (SELECT string_agg(id_parcelle, ', ') FROM cadastre.parcelles p WHERE ST_Intersects(p.geom, b.geom)) as parcelles_liees FROM domaine.biens b WHERE b.id = {{$json.bien_id}};"
+      },
+      "id": "getBien",
+      "name": "Récupérer Données Bien",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [{
+            "value1": "={{$items('Parser Demande')[0].json.type_acte}}",
+            "operation": "equals",
+            "value2": "bail"
+          }]
+        }
+      },
+      "id": "switchActe",
+      "name": "Type Acte?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [920, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const bien = $items('Récupérer Données Bien')[0].json;\nconst params = $items('Parser Demande')[0].json;\n\nconst acte = {\n  type: 'BAIL DOMANIAL',\n  numero: 'BD-' + new Date().getFullYear() + '-' + Math.random().toString(36).substr(2,6).toUpperCase(),\n  date: params.date_generation,\n  bien: {\n    reference: bien.reference,\n    designation: bien.designation,\n    adresse: bien.adresse,\n    surface: bien.surface,\n    parcelles: bien.parcelles_liees\n  },\n  bailleur: {\n    nom: 'ÉTAT DU SÉNÉGAL',\n    represente_par: 'Le Directeur des Domaines'\n  },\n  preneur: {\n    nom: params.preneur_nom || 'À COMPLÉTER',\n    adresse: params.preneur_adresse || ''\n  },\n  conditions: {\n    duree: params.duree || '5 ans',\n    loyer_annuel: bien.valeur_locative || 'À DÉTERMINER',\n    loyer_mensuel: bien.valeur_locative ? Math.round(bien.valeur_locative / 12) : 'À DÉTERMINER',\n    date_effet: params.date_effet || params.date_generation\n  },\n  clauses: [\n    'Le preneur s\\'engage à utiliser le bien conformément à sa destination.',\n    'Toute modification doit faire l\\'objet d\\'une autorisation préalable.',\n    'Le loyer est payable trimestriellement d\\'avance.'\n  ]\n};\n\nreturn [{ json: acte }];"
+      },
+      "id": "genererBail",
+      "name": "Générer Bail",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 260]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const bien = $items('Récupérer Données Bien')[0].json;\nconst params = $items('Parser Demande')[0].json;\n\nconst acte = {\n  type: 'ATTESTATION DE PROPRIÉTÉ DOMANIALE',\n  numero: 'ATT-' + new Date().getFullYear() + '-' + Math.random().toString(36).substr(2,6).toUpperCase(),\n  date: params.date_generation,\n  certifie_que: {\n    bien_reference: bien.reference,\n    designation: bien.designation,\n    adresse: bien.adresse,\n    commune: bien.code_commune,\n    surface: bien.surface + ' m²',\n    parcelles_cadastrales: bien.parcelles_liees\n  },\n  appartient_a: 'L\\'ÉTAT DU SÉNÉGAL',\n  depuis: bien.date_acquisition || 'Date à préciser',\n  origine: bien.origine_propriete || 'Domaine public',\n  affectation_actuelle: bien.affectation || 'Non affecté',\n  gestionnaire: bien.gestionnaire || 'Direction des Domaines',\n  valeur: {\n    venale: bien.valeur_venale ? bien.valeur_venale + ' FCFA' : 'Non évaluée',\n    locative: bien.valeur_locative ? bien.valeur_locative + ' FCFA/an' : 'Non évaluée'\n  },\n  delivree_pour: params.motif || 'Servir et valoir ce que de droit'\n};\n\nreturn [{ json: acte }];"
+      },
+      "id": "genererAttestation",
+      "name": "Générer Attestation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1160, 460]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://geo-api:8000/api/v1/rapports/fiche-bien/{{$items('Parser Demande')[0].json.bien_id}}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "genererPDF",
+      "name": "Générer PDF via API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1400, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO domaine.documents (bien_id, type_document, titre, description, date_document) VALUES ({{$items('Parser Demande')[0].json.bien_id}}, '{{$json.type === \"BAIL DOMANIAL\" ? \"bail\" : \"attestation\"}}', '{{$json.type}} - {{$json.numero}}', 'Acte généré automatiquement', '{{$json.date}}') RETURNING id;"
+      },
+      "id": "enregistrerDocument",
+      "name": "Enregistrer Document",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1620, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traitement.logs (workflow_id, execution_id, etape, statut, message, donnees) VALUES ('generation_actes', '{{$execution.id}}', 'acte_genere', 'success', 'Acte {{$json.type}} généré: {{$json.numero}}', '{{JSON.stringify($json)}}'::jsonb);"
+      },
+      "id": "logResult",
+      "name": "Logger Résultat",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1840, 360]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, type_acte: $json.type, numero: $json.numero, date: $json.date, message: 'Acte généré avec succès' } }}"
+      },
+      "id": "respond",
+      "name": "Répondre",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [2060, 360]
+    }
+  ],
+  "connections": {
+    "Demande Acte": { "main": [[{ "node": "Parser Demande", "type": "main", "index": 0 }]] },
+    "Parser Demande": { "main": [[{ "node": "Récupérer Données Bien", "type": "main", "index": 0 }]] },
+    "Récupérer Données Bien": { "main": [[{ "node": "Type Acte?", "type": "main", "index": 0 }]] },
+    "Type Acte?": { "main": [
+      [{ "node": "Générer Bail", "type": "main", "index": 0 }],
+      [{ "node": "Générer Attestation", "type": "main", "index": 0 }]
+    ]},
+    "Générer Bail": { "main": [[{ "node": "Générer PDF via API", "type": "main", "index": 0 }]] },
+    "Générer Attestation": { "main": [[{ "node": "Générer PDF via API", "type": "main", "index": 0 }]] },
+    "Générer PDF via API": { "main": [[{ "node": "Enregistrer Document", "type": "main", "index": 0 }]] },
+    "Enregistrer Document": { "main": [[{ "node": "Logger Résultat", "type": "main", "index": 0 }]] },
+    "Logger Résultat": { "main": [[{ "node": "Répondre", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

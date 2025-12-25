@@ -1,0 +1,52 @@
+{
+  "name": "Export Cartographique Bien",
+  "id": "export-cartographique-bien-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "export-carte", "responseMode": "responseNode" },
+      "id": "webhookExport",
+      "name": "Webhook Export",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "WITH bien AS ( SELECT * FROM domaine.biens WHERE id = {{ $json.body.bien_id }} ), buffer AS ( SELECT ST_Buffer(geom, 200) AS geom FROM bien ), parcelles AS ( SELECT 'parcelle' AS type, p.id_parcelle AS id, json_build_object('section', p.section, 'numero', p.numero, 'contenance', p.contenance) AS properties, p.geom FROM cadastre.parcelles p, buffer b WHERE ST_Intersects(p.geom, b.geom) ), batiments AS ( SELECT 'batiment' AS type, bat.id_batiment AS id, json_build_object('type', bat.type, 'date_construction', bat.date_construction, 'surface_sol', bat.surface_sol) AS properties, bat.geom FROM cadastre.batiments bat, buffer b WHERE ST_Intersects(bat.geom, b.geom) ), all_geoms AS ( SELECT * FROM parcelles UNION ALL SELECT * FROM batiments ) SELECT json_build_object('type','FeatureCollection','features', json_agg(json_build_object('type','Feature','geometry', ST_AsGeoJSON(geom)::json,'properties', json_build_object('type', type, 'id', id) || properties))) AS geojson FROM all_geoms;" },
+      "id": "exportGeoJSON",
+      "name": "Exporter GeoJSON",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": { "mode": "runOnceForAllItems", "jsCode": "const row = $input.first().json; return [{ json: { geojson: row.geojson, bien_id: $json.body.bien_id } }];" },
+      "id": "prepare",
+      "name": "Préparer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ { fileName: 'export_bien_' + $json.bien_id + '.geojson', data: $json.geojson } }}" },
+      "id": "respond",
+      "name": "Retourner GeoJSON",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [960, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Export": { "main": [[{ "node": "Exporter GeoJSON", "type": "main", "index": 0 }]] },
+    "Exporter GeoJSON": { "main": [[{ "node": "Préparer", "type": "main", "index": 0 }]] },
+    "Préparer": { "main": [[{ "node": "Retourner GeoJSON", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

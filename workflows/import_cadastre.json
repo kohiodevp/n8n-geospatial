@@ -1,0 +1,135 @@
+{
+  "name": "Import Cadastre Commune",
+  "id": "import-cadastre-commune-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manualTrigger",
+      "name": "Déclencheur Manuel",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const communes = [ { code: '75056', nom: 'Paris' }, { code: '69123', nom: 'Lyon' }, { code: '13055', nom: 'Marseille' } ]; return communes.map(c => ({ json: c }));"
+      },
+      "id": "configCommunes",
+      "name": "Configuration Communes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/' + $json.code + '/geojson/parcelles' }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "downloadParcelles",
+      "name": "Télécharger Parcelles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 180]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/' + $json.code + '/geojson/batiments' }}",
+        "options": { "timeout": 120000 }
+      },
+      "id": "downloadBatiments",
+      "name": "Télécharger Bâtiments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 420]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const parcelles = $input.first().json; const conf = $items().find(i => i.node && i.node.name === 'Configuration Communes'); const commune = (conf && conf.json) || {}; if (!parcelles.features) return [{ json: { error: 'Pas de parcelles', commune: commune.code || null } }]; const rows = parcelles.features.map(f => { const p = f.properties || {}; return { id_parcelle: p.id || p.objectid || '', code_commune: commune.code || p.commune || p.code_insee || '', prefixe: p.prefixe || '000', section: p.section || '', numero: p.numero || p.num || '', contenance: (p.contenance ?? p.surface) ?? null, arpente: !!p.arpente, geom_geojson: JSON.stringify(f.geometry) }; }); return rows.map(r => ({ json: r }));"
+      },
+      "id": "transformParcelles",
+      "name": "Transformer Parcelles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 180]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO cadastre.parcelles (id_parcelle, code_commune, prefixe, section, numero, contenance, arpente, geom) VALUES ('{{$json.id_parcelle}}', '{{$json.code_commune}}', '{{$json.prefixe}}', '{{$json.section}}', '{{$json.numero}}', {{ $json.contenance !== null ? $json.contenance : 'NULL' }}, {{ $json.arpente ? 'true' : 'false' }}, ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON('{{$json.geom_geojson}}'), 4326), 2154)) ON CONFLICT (id_parcelle) DO UPDATE SET contenance = EXCLUDED.contenance, geom = EXCLUDED.geom;"
+      },
+      "id": "insertParcelles",
+      "name": "Insérer Parcelles PostGIS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1200, 180]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const bats = $input.first().json; if (!bats.features) return [{ json: { info: 'Pas de bâtiments' } }]; const rows = bats.features.map(f => { const p = f.properties || {}; return { id_batiment: p.id || p.identifiant || p.objectid || '', id_parcelle: p.id_parcelle || p.parcelle || null, type: p.type || p.nature || null, date_construction: p.date_construction || p.annee_construction || null, surface_sol: (p.surface || p.emprise) || null, hauteur: p.hauteur || null, geom_geojson: JSON.stringify(f.geometry) }; }); return rows.map(r => ({ json: r }));"
+      },
+      "id": "transformBatiments",
+      "name": "Transformer Bâtiments",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [940, 420]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO cadastre.batiments (id_batiment, id_parcelle, type, date_construction, surface_sol, hauteur, geom) VALUES ('{{$json.id_batiment}}', '{{$json.id_parcelle}}', '{{$json.type}}', {{$json.date_construction !== null ? $json.date_construction : 'NULL'}}, {{$json.surface_sol !== null ? $json.surface_sol : 'NULL'}}, {{$json.hauteur !== null ? $json.hauteur : 'NULL'}}, ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON('{{$json.geom_geojson}}'), 4326), 2154)) ON CONFLICT (id_batiment) DO UPDATE SET surface_sol = EXCLUDED.surface_sol, hauteur = EXCLUDED.hauteur, geom = EXCLUDED.geom;"
+      },
+      "id": "insertBatiments",
+      "name": "Insérer Bâtiments PostGIS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1200, 420]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) AS total_parcelles, SUM(contenance) AS surface_totale, COUNT(DISTINCT section) AS nb_sections FROM cadastre.parcelles WHERE code_commune = '{{ $json.code_commune }}';"
+      },
+      "id": "statsImport",
+      "name": "Statistiques Import",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1420, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traitement.logs (workflow_id, execution_id, etape, statut, message, donnees) VALUES ('import_cadastre', '{{$execution.id}}', 'import_complete', 'success', 'Import terminé', '{}');"
+      },
+      "id": "logResult",
+      "name": "Logger Résultat",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1640, 300]
+    }
+  ],
+  "connections": {
+    "Déclencheur Manuel": { "main": [[{ "node": "Configuration Communes", "type": "main", "index": 0 }]] },
+    "Configuration Communes": { "main": [[ { "node": "Télécharger Parcelles", "type": "main", "index": 0 }, { "node": "Télécharger Bâtiments", "type": "main", "index": 0 } ]] },
+    "Télécharger Parcelles": { "main": [[{ "node": "Transformer Parcelles", "type": "main", "index": 0 }]] },
+    "Transformer Parcelles": { "main": [[{ "node": "Insérer Parcelles PostGIS", "type": "main", "index": 0 }]] },
+    "Télécharger Bâtiments": { "main": [[{ "node": "Transformer Bâtiments", "type": "main", "index": 0 }]] },
+    "Transformer Bâtiments": { "main": [[{ "node": "Insérer Bâtiments PostGIS", "type": "main", "index": 0 }]] },
+    "Insérer Parcelles PostGIS": { "main": [[{ "node": "Statistiques Import", "type": "main", "index": 0 }]] },
+    "Insérer Bâtiments PostGIS": { "main": [[{ "node": "Statistiques Import", "type": "main", "index": 0 }]] },
+    "Statistiques Import": { "main": [[{ "node": "Logger Résultat", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

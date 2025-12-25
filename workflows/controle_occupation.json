@@ -1,0 +1,135 @@
+{
+  "name": "Contrôle Périodique Occupation",
+  "id": "controle-periodique-occupation-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{
+            "field": "cronExpression",
+            "expression": "0 9 1 * *"
+          }]
+        }
+      },
+      "id": "cronMensuel",
+      "name": "1er de Chaque Mois 9h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 360]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT b.id, b.reference, b.designation, b.code_commune, b.affectation, b.gestionnaire, o.occupant, o.type_occupation, o.date_debut, o.date_fin, o.loyer, CASE WHEN o.date_fin IS NOT NULL AND o.date_fin < CURRENT_DATE THEN 'expire' WHEN o.date_fin IS NOT NULL AND o.date_fin < CURRENT_DATE + INTERVAL '30 days' THEN 'bientot_expire' WHEN o.id IS NULL THEN 'non_occupe' ELSE 'en_cours' END as statut_occupation FROM domaine.biens b LEFT JOIN domaine.occupations o ON b.id = o.bien_id AND (o.date_fin IS NULL OR o.date_fin >= CURRENT_DATE - INTERVAL '30 days') WHERE b.statut = 'actif' ORDER BY b.reference;"
+      },
+      "id": "getBiensOccupations",
+      "name": "Lister Biens et Occupations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [460, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all().map(i => i.json);\n\nconst anomalies = items.filter(b => ['expire', 'bientot_expire', 'non_occupe'].includes(b.statut_occupation));\nconst expirees = anomalies.filter(b => b.statut_occupation === 'expire');\nconst bientotExpirees = anomalies.filter(b => b.statut_occupation === 'bientot_expire');\nconst nonOccupes = anomalies.filter(b => b.statut_occupation === 'non_occupe');\n\nconst rapport = {\n  date_controle: new Date().toISOString().slice(0,10),\n  total_biens: items.length,\n  en_cours: items.filter(b => b.statut_occupation === 'en_cours').length,\n  anomalies_total: anomalies.length,\n  occupations_expirees: expirees.length,\n  occupations_bientot_expirees: bientotExpirees.length,\n  biens_non_occupes: nonOccupes.length,\n  details_anomalies: anomalies.slice(0, 20)\n};\n\nreturn [{ json: rapport }];"
+      },
+      "id": "analyserOccupations",
+      "name": "Analyser Occupations",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 360]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [{
+            "value1": "={{$json.anomalies_total}}",
+            "operation": "larger",
+            "value2": 0
+          }]
+        }
+      },
+      "id": "hasAnomalies",
+      "name": "Anomalies Détectées?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [940, 360]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const r = $json;\nconst message = `CONTRÔLE MENSUEL OCCUPATION\\n\\nDate: ${r.date_controle}\\nTotal biens: ${r.total_biens}\\n\\nANOMALIES DÉTECTÉES: ${r.anomalies_total}\\n- Occupations expirées: ${r.occupations_expirees}\\n- À renouveler sous 30j: ${r.occupations_bientot_expirees}\\n- Biens non occupés: ${r.biens_non_occupes}\\n\\nVeuillez consulter le détail dans le tableau de bord.`;\n\nreturn [{ json: { ...r, message_alerte: message } }];"
+      },
+      "id": "preparerAlerte",
+      "name": "Préparer Message Alerte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 260]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT traitement.creer_alerte_sms('controle_occupation', 'Contrôle mensuel: {{$json.anomalies_total}} anomalies', '{{$json.message_alerte}}', '+221770000000', '{{$json.anomalies_total > 5 ? \"importante\" : \"normale\"}}', NULL) AS alerte_id;"
+      },
+      "id": "envoyerAlerte",
+      "name": "Envoyer Alerte SMS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1420, 260]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "loopAnomalies",
+      "name": "Pour Chaque Anomalie",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [1180, 460]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traitement.alertes (type_alerte, priorite, titre, message, bien_id, canal_notification, statut_envoi) SELECT 'controle_occupation', CASE WHEN statut_occupation = 'expire' THEN 'importante' ELSE 'normale' END, 'Anomalie occupation: ' || reference, 'Bien ' || reference || ' - ' || designation || ': ' || CASE statut_occupation WHEN 'expire' THEN 'Occupation expirée' WHEN 'bientot_expire' THEN 'Occupation expire bientôt' ELSE 'Non occupé' END, id, 'sms', 'en_attente' FROM (SELECT '{{$json.id}}'::int as id, '{{$json.reference}}' as reference, '{{$json.designation}}' as designation, '{{$json.statut_occupation}}' as statut_occupation) t;"
+      },
+      "id": "creerAlerteAnomalie",
+      "name": "Créer Alerte Anomalie",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1420, 460]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traitement.logs (workflow_id, execution_id, etape, statut, message, donnees) VALUES ('controle_occupation', '{{$execution.id}}', 'controle_mensuel', 'success', 'Contrôle mensuel: {{$json.anomalies_total}} anomalies sur {{$json.total_biens}} biens', '{{JSON.stringify($json)}}'::jsonb);"
+      },
+      "id": "logResult",
+      "name": "Logger Résultat",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1660, 360]
+    }
+  ],
+  "connections": {
+    "1er de Chaque Mois 9h": { "main": [[{ "node": "Lister Biens et Occupations", "type": "main", "index": 0 }]] },
+    "Lister Biens et Occupations": { "main": [[{ "node": "Analyser Occupations", "type": "main", "index": 0 }]] },
+    "Analyser Occupations": { "main": [[{ "node": "Anomalies Détectées?", "type": "main", "index": 0 }]] },
+    "Anomalies Détectées?": { "main": [
+      [{ "node": "Préparer Message Alerte", "type": "main", "index": 0 }, { "node": "Pour Chaque Anomalie", "type": "main", "index": 0 }],
+      [{ "node": "Logger Résultat", "type": "main", "index": 0 }]
+    ]},
+    "Préparer Message Alerte": { "main": [[{ "node": "Envoyer Alerte SMS", "type": "main", "index": 0 }]] },
+    "Envoyer Alerte SMS": { "main": [[{ "node": "Logger Résultat", "type": "main", "index": 0 }]] },
+    "Pour Chaque Anomalie": { "main": [[{ "node": "Créer Alerte Anomalie", "type": "main", "index": 0 }]] },
+    "Créer Alerte Anomalie": { "main": [[{ "node": "Pour Chaque Anomalie", "type": "main", "index": 1 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

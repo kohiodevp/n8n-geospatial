@@ -1,0 +1,211 @@
+{
+  "name": "AI Agent Domanial",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-domanial",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "promptType": "chat",
+        "promptMessages": [
+          {
+            "role": "system",
+            "message": "Tu es l'Agent Domanial IA. Ton expertise porte sur la gestion des biens fonciers (domaine), les évaluations et l'instruction des dossiers administratifs.\n\nOutils disponibles :\n- **search_bien_by_ref**: Recherche un bien du domaine par sa référence unique.\n- **analyse_bien_details**: Fournit une analyse spatiale et de valeur détaillée pour un bien via son ID.\n- **search_dossier_by_ref**: Recherche un dossier d'instruction par sa référence."
+          },
+          {
+            "role": "user",
+            "message": "={{$json.body.message}}"
+          }
+        ],
+        "tools": [
+          {
+            "tool": {
+              "name": "search_bien_by_ref"
+            }
+          },
+          {
+            "tool": {
+              "name": "analyse_bien_details"
+            }
+          },
+          {
+            "tool": {
+              "name": "search_dossier_by_ref"
+            }
+          }
+        ],
+        "options": {}
+      },
+      "id": "agent",
+      "name": "Agent Domanial",
+      "type": "n8n-nodes-base.aiAgent",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, reference, type_bien, designation, adresse, code_commune, surface, valeur_venale, statut, date_modification FROM domaine.biens WHERE reference ILIKE '{{ $json.parameters.reference }}' LIMIT 1;",
+        "options": {}
+      },
+      "id": "search_bien_by_ref",
+      "name": "Search Bien by Ref",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        740,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Outil IA: Recherche un bien par sa référence."
+    },
+    {
+      "parameters": {
+        "url": "=http://geo-api:8000/api/v1/biens/{{ $json.parameters.bien_id }}/analyse",
+        "authentication": "predefinedCredential",
+        "nodeCredential": {
+          "type": "n8n-nodes-base.oAuth2JwtBearer",
+          "data": {
+            "name": "JWT Geo API",
+            "accessTokenUrl": "http://geo-api:8000/auth/token",
+            "clientId": "gestionnaire",
+            "clientSecret": "cadastre2024",
+            "scope": "biens:read"
+          }
+        },
+        "options": {}
+      },
+      "id": "analyse_bien_details",
+      "name": "Analyse Bien Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        740,
+        300
+      ],
+      "notes": "Outil IA: Appelle l'API pour une analyse détaillée du bien."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, reference, type_dossier, statut, priorite, objet, instructeur, date_limite FROM traitement.dossiers WHERE reference ILIKE '{{ $json.parameters.reference }}' LIMIT 1;",
+        "options": {}
+      },
+      "id": "search_dossier_by_ref",
+      "name": "Search Dossier by Ref",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        740,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Outil IA: Recherche un dossier par sa référence."
+    }
+  ],
+  "connections": {
+    "trigger": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent": {
+      "main": [
+        [
+          {
+            "node": "search_bien_by_ref",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "analyse_bien_details",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "search_dossier_by_ref",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "search_bien_by_ref": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "analyse_bien_details": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search_dossier_by_ref": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,88 @@
+{
+  "name": "Sync Quotidienne Cadastre",
+  "id": "sync-quotidienne-cadastre-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "rule": { "interval": [{ "field": "cronExpression", "expression": "0 2 * * *" }] } },
+      "id": "cronDaily",
+      "name": "Tous les jours à 2h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT DISTINCT code_commune FROM domaine.biens WHERE statut = 'actif' ORDER BY code_commune;" },
+      "id": "getCommunes",
+      "name": "Communes à Synchroniser",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": { "batchSize": 1 },
+      "id": "loopCommunes",
+      "name": "Pour Chaque Commune",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [700, 300]
+    },
+    {
+      "parameters": { "method": "GET", "url": "={{ 'https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/' + $json.code_commune + '/geojson/parcelles' }}", "options": { "timeout": 120000 } },
+      "id": "downloadParcelles",
+      "name": "Télécharger Parcelles",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [920, 220]
+    },
+    {
+      "parameters": { "mode": "runOnceForAllItems", "jsCode": "const parcelles = $input.first().json; const code_commune = $json.code_commune; if (!parcelles.features) return [{ json: { error: 'Pas de parcelles', code_commune } }]; const rows = parcelles.features.map(f => { const p = f.properties || {}; return { id_parcelle: p.id || p.objectid || '', code_commune, prefixe: p.prefixe || '000', section: p.section || '', numero: p.numero || p.num || '', contenance: (p.contenance ?? p.surface) ?? null, arpente: !!p.arpente, geom_geojson: JSON.stringify(f.geometry) }; }); return rows.map(r => ({ json: r }));" },
+      "id": "transformParcelles",
+      "name": "Transformer Parcelles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 220]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "INSERT INTO cadastre.parcelles (id_parcelle, code_commune, prefixe, section, numero, contenance, arpente, geom) VALUES ( '{{$json.id_parcelle}}', '{{$json.code_commune}}', '{{$json.prefixe}}', '{{$json.section}}', '{{$json.numero}}', {{ $json.contenance !== null ? $json.contenance : 'NULL' }}, {{ $json.arpente ? 'true' : 'false' }}, ST_Transform(ST_SetSRID(ST_GeomFromGeoJSON('{{$json.geom_geojson}}'), 4326), 2154) ) ON CONFLICT (id_parcelle) DO UPDATE SET contenance = EXCLUDED.contenance, geom = EXCLUDED.geom;" },
+      "id": "insertParcelles",
+      "name": "Insérer Parcelles PostGIS",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1360, 220]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "INSERT INTO traitement.logs (workflow_id, execution_id, etape, statut, message, donnees) VALUES ('sync_cadastre', '{{$execution.id}}', 'commune_sync', 'success', 'Sync commune {{ $json.code_commune }}', '{}');" },
+      "id": "logCommune",
+      "name": "Logger Commune",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1580, 300]
+    },
+    {
+      "parameters": {},
+      "id": "continueLoop",
+      "name": "Prochaine Commune",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1800, 300]
+    }
+  ],
+  "connections": {
+    "Tous les jours à 2h": { "main": [[{ "node": "Communes à Synchroniser", "type": "main", "index": 0 }]] },
+    "Communes à Synchroniser": { "main": [[{ "node": "Pour Chaque Commune", "type": "main", "index": 0 }]] },
+    "Pour Chaque Commune": { "main": [[{ "node": "Télécharger Parcelles", "type": "main", "index": 0 }]] },
+    "Télécharger Parcelles": { "main": [[{ "node": "Transformer Parcelles", "type": "main", "index": 0 }]] },
+    "Transformer Parcelles": { "main": [[{ "node": "Insérer Parcelles PostGIS", "type": "main", "index": 0 }]] },
+    "Insérer Parcelles PostGIS": { "main": [[{ "node": "Logger Commune", "type": "main", "index": 0 }]] },
+    "Logger Commune": { "main": [[{ "node": "Pour Chaque Commune", "type": "main", "index": 1 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

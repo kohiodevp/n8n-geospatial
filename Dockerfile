@@ -60,12 +60,10 @@ ENV PATH="/opt/venv/bin:$PATH"
 # ============================================
 # Scripts géospatiaux
 # ============================================
-RUN mkdir -p /opt/geoscripts /tmp/runtime-node && chmod 777 /tmp/runtime-node
+RUN mkdir -p /opt/geoscripts /opt/init-scripts /tmp/runtime-node && chmod 777 /tmp/runtime-node
 
-COPY scripts/qgis_processing.py /opt/geoscripts/
-COPY scripts/postgis_utils.py /opt/geoscripts/
-COPY scripts/grass_utils.py /opt/geoscripts/
-COPY scripts/health_check.py /opt/geoscripts/
+COPY scripts /opt/geoscripts/
+COPY init-scripts /opt/init-scripts/
 
 RUN chmod +x /opt/geoscripts/*.py
 ENV PYTHONPATH="/opt/geoscripts:${PYTHONPATH}"

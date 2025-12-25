@@ -1,0 +1,60 @@
+{
+  "name": "AI Guide Utilisateur",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-guide",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "promptType": "chat",
+        "promptMessages": [
+          {
+            "role": "system",
+            "message": "Tu es le Guide IA du système n8n-geo. Ton rôle est d'aider les utilisateurs à comprendre comment utiliser la plateforme. Ton unique source de connaissance est le guide utilisateur fourni ci-dessous. Réponds aux questions en te basant exclusivement sur ce texte. Si une information n'est pas dans le guide, mentionne-le explicitement.\n\n---\nDEBUT DU GUIDE UTILISATEUR ---\n\n# 📘 Guide Utilisateur Professionnel - Système n8n-geo\n\n**Version 2.1.1** | _Gestion Domaniale et Cadastrale Intelligente_\n\n---\n\n## 🚀 1. Présentation du Système\n\nLe système **n8n-geo** est une plateforme d'ingénierie logicielle avancée combinant **PostGIS** pour la puissance géospatiale, **FastAPI** pour une interface REST sécurisée, et **n8n** pour l'automatisation métier.\n\n### Objectifs Clés\n\n- **Automatisation** des processus administratifs domaniaux.\n- **Précision** des calculs de valeurs foncières basés sur les données DVF.\n- **Sécurité** des données par authentification JWT et chiffrement robuste.\n\n---\n\n## 🛠️ 2. Prise en Main (Exploitation)\n\n### Accès aux Interfaces\n\n| Composant             | URL                                                      | Utilisation                                     |\n| :-------------------- | :------------------------------------------------------- | :---------------------------------------------- |\n| **n8n Dashboard**     | [http://localhost:5678](http://localhost:5678)           | Gestion et monitoring des workflows.            |\n| **Documentation API** | [http://localhost:8000/docs](http://localhost:8000/docs) | Interaction directe avec les données (Swagger). |\n| **Monitoring Stats**  | `/api/v1/stats`                                          | Vue d'ensemble de l'activité du système.        |\n\n### Sécurité (Authentification JWT)\n\nPour utiliser l'API ou accéder aux endpoints restreints :\n\n1.  **Obtenir un token** :\n    ```bash\n    curl -X POST http://localhost:8000/api/v1/token \\n         -F \"username=admin@example.com\" \\n         -F \"password=votre_mot_de_passe\"\n    ```\n2.  **Utiliser le token** : Ajoutez le header `Authorization: Bearer <TOKEN>` à vos requêtes.\n\n> [!IMPORTANT]\n> Ne partagez jamais votre `N8N_ENCRYPTION_KEY` définie dans le fichier `docker-compose.yml`.\n\n---\n\n## 🤖 3. Catalogue des Workflows Métier\n\n### 📂 Gestion des Dossiers & Biens\n\n1.  **Instruction de Dossier** (`instruction-dossier-001`)\n    - **Déclencheur** : Webhook (POST).\n    - **Exemple de Payload JSON** :\n      ```json\n      {\n        \"num_dossier\": \"D2024-001\",\n        \"parcelle_id\": \"83001000AB0123\",\n        \"demandeur\": \"Société Immobilière Pro\",\n        \"type_instruction\": \"Acquisition\"\n      }\n      ```\n    - **Action** : Crée un dossier en base, analyse le bien associé, et notifie par SMS.\n2.  **Analyse Spatiale Bien** (`analyse-spatiale-bien-001`)\n    - **Action** : Calcul des buffers de proximité et détection des bâtiments sur une parcelle.\n\n### 💰 Finance & Évaluation\n\n3. **Calcul Valeur Locative DVF** (`calcul-valeur-locative-dvf-001`)\n   - **Action** : Récupère les transactions DVF locales pour estimer automatiquement la valeur locative d'un bien domanial.\n\n### 📅 Maintenance & Régalien\n\n4. **Sync Quotidienne Cadastre** (`sync-quotidienne-cadastre-001`)\n   - **Déclencheur** : Planification journalière (04:00 AM).\n   - **Action** : Met à jour les géométries parcellaires si de nouvelles données sont disponibles.\n5. **Contrôle Occupation** (`controle-periodique-occupation-001`)\n   - **Action** : Analyse les anomalies d'occupation et génère des alertes SMS.\n\n---\n\n## 📊 4. Monitoring & Maintenance Professionnelle\n\n### Journaux d'Activité (Logs)\n\nLes logs sont structurés au format **JSON** pour une exploitation professionnelle.\n\n```bash\n# Voir les logs de l'API en temps réel\ndocker logs -f geo-api\n```\n\n### Statistiques Métier\n\nL'endpoint `/api/v1/stats` (nécessite un token) fournit une vue consolidée.\n\n**Exemple de réponse** :\n\n```json\n{\n  \"nb_biens\": 125,\n  \"nb_dossiers_actifs\": 12,\n  \"nb_alertes_unread\": 3,\n  \"dernier_traitement\": \"2025-12-20T04:00:00\"\n}\n```\n\n---\n\n## 💎 5. Détail Approfondi des Fonctionnalités\n\n### A. Moteur Géospatial (PostGIS)\n\nLe système s'appuie sur trois schémas SQL spécialisés :\n\n- **Schema `cadastre`** : Stockage des parcelles, bâtiments et propriétaires. Optimisé pour les index GIST (géométrie).\n- **Schema `domaine`** : Gestion des biens de l'État, des évaluations vénales/locatives et des actes administratifs.\n- **Schema `traitement`** : Logs techniques et suivi des exécutions (`traitement.logs`).\n\n---\n\n_Guide rédigé par l'Assistant Antigravity pour une exploitation optimale du système n8n-geo._\n\n--- FIN DU GUIDE UTILISATEUR ---"
+          },
+          {
+            "role": "user",
+            "message": "={{$json.body.message}}"
+          }
+        ],
+        "options": {}
+      },
+      "id": "agent",
+      "name": "Agent Guide",
+      "type": "n8n-nodes-base.aiAgent",
+      "typeVersion": 1,
+      "position": [460, 300]
+    }
+  ],
+  "connections": {
+    "trigger": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

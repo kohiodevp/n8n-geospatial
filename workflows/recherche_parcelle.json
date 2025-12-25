@@ -1,0 +1,70 @@
+{
+  "name": "Recherche Parcelle par Adresse",
+  "id": "recherche-parcelle-adresse-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "recherche-parcelle", "responseMode": "responseNode" },
+      "id": "webhookRecherche",
+      "name": "Webhook Recherche",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [260, 300]
+    },
+    {
+      "parameters": { "method": "GET", "url": "={{ 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent($json.body.adresse || '') + '&limit=1' }}" },
+      "id": "geocodeAdresse",
+      "name": "Géocodage Adresse",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [480, 300]
+    },
+    {
+      "parameters": { "mode": "runOnceForAllItems", "jsCode": "const r = $input.first().json; if (!r.features || r.features.length === 0) { return [{ json: { error: 'Adresse non trouvée' } }]; } const f = r.features[0]; const [lon, lat] = f.geometry.coordinates; return [{ json: { adresse: (f.properties && (f.properties.label || f.properties.libl || f.properties.name)) || ($json.body && $json.body.adresse) || '', lon, lat } }];" },
+      "id": "parseGeocode",
+      "name": "Parser Géocodage",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": { "method": "GET", "url": "={{ 'https://apicarto.ign.fr/api/cadastre/parcelle?geom=' + encodeURIComponent(JSON.stringify({type:'Point',coordinates:[$json.lon,$json.lat]})) + '&_limit=10' }}", "options": { "timeout": 30000 } },
+      "id": "apiCadastreIGN",
+      "name": "API Cadastre IGN",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [920, 300]
+    },
+    {
+      "parameters": { "mode": "runOnceForAllItems", "jsCode": "const cad = $input.first().json; const infoNode = $items().find(i => i.node && i.node.name === 'Parser Géocodage'); const info = (infoNode && infoNode.json) || {}; if (!cad.features || cad.features.length === 0) { return [{ json: { success: false, message: 'Aucune parcelle trouvée', adresse: info.adresse || '' } }]; } const parcelles = cad.features.map(f => ({ id: f.properties && f.properties.id, commune: f.properties && f.properties.commune, prefixe: f.properties && f.properties.prefixe, section: f.properties && f.properties.section, numero: f.properties && f.properties.numero, surface: (f.properties && (f.properties.surface || f.properties.contenance)) || null })); return [{ json: { success: true, adresse: info.adresse || '', parcelles } }];" },
+      "id": "formatResponse",
+      "name": "Formater Réponse",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1140, 300]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ $json }}" },
+      "id": "respondWebhook",
+      "name": "Répondre",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1360, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Recherche": { "main": [[{ "node": "Géocodage Adresse", "type": "main", "index": 0 }]] },
+    "Géocodage Adresse": { "main": [[{ "node": "Parser Géocodage", "type": "main", "index": 0 }]] },
+    "Parser Géocodage": { "main": [[{ "node": "API Cadastre IGN", "type": "main", "index": 0 }]] },
+    "API Cadastre IGN": { "main": [[{ "node": "Formater Réponse", "type": "main", "index": 0 }]] },
+    "Formater Réponse": { "main": [[{ "node": "Répondre", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

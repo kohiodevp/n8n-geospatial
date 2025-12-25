@@ -1,0 +1,166 @@
+{
+  "name": "AI Administrateur",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-admin",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "promptType": "chat",
+        "promptMessages": [
+          {
+            "role": "system",
+            "message": "Tu es l\\'Administrateur IA du système n8n-geo. Ton rôle est de surveiller la santé du système, de fournir des statistiques et d\\'aider à la maintenance. Tu es concis et factuel.\n\nOutils disponibles :\n- **get_api_stats**: Pour obtenir les statistiques de l\\'API (nombre de biens, dossiers actifs, etc.).\n- **execute_sql_query**: Pour exécuter une requête SQL SELECT en lecture seule sur la base de données PostGIS. Utilise cet outil pour des questions précises sur les données que les stats de l\\'API ne couvrent pas. Par exemple : 'Quels sont les 5 derniers biens créés ?' ou 'Liste les dossiers urgents'."
+          },
+          {
+            "role": "user",
+            "message": "={{$json.body.message}}"
+          }
+        ],
+        "tools": [
+          {
+            "tool": {
+              "name": "get_api_stats"
+            }
+          },
+          {
+            "tool": {
+              "name": "execute_sql_query"
+            }
+          }
+        ],
+        "options": {}
+      },
+      "id": "agent",
+      "name": "Agent Administrateur",
+      "type": "n8n-nodes-base.aiAgent",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://geo-api:8000/api/v1/stats",
+        "authentication": "predefinedCredential",
+        "nodeCredential": {
+          "type": "n8n-nodes-base.oAuth2JwtBearer",
+          "data": {
+            "name": "JWT Geo API",
+            "accessTokenUrl": "http://geo-api:8000/auth/token",
+            "clientId": "admin",
+            "clientSecret": "cadastre2024",
+            "scope": "admin"
+          }
+        },
+        "options": {}
+      },
+      "id": "get_api_stats",
+      "name": "Get API Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        660,
+        200
+      ],
+      "notes": "Outil pour l\\'agent IA. Récupère les statistiques de l\\'API."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.parameters.query }}",
+        "options": {}
+      },
+      "id": "execute_sql_query",
+      "name": "Execute SQL Query",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        660,
+        400
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Outil pour l\\'agent IA. Exécute une requête SQL SELECT."
+    }
+  ],
+  "connections": {
+    "trigger": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent": {
+      "main": [
+        [
+          {
+            "node": "get_api_stats",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "execute_sql_query",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "get_api_stats": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute_sql_query": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

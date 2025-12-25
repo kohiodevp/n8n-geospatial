@@ -1,0 +1,79 @@
+{
+  "name": "Analyse Spatiale Bien Domanial",
+  "id": "analyse-spatiale-bien-001",
+  "versionId": "1",
+  "meta": {
+    "instanceId": "n8n-geo-local"
+  },
+  "active": false,
+  "nodes": [
+    {
+      "parameters": { "httpMethod": "POST", "path": "analyse-bien", "responseMode": "responseNode" },
+      "id": "webhookAnalyse",
+      "name": "Webhook Analyse",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 360]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT id, reference, designation, ST_Area(geom) AS surface_calculee, ST_Perimeter(geom) AS perimetre, ST_AsGeoJSON(ST_Centroid(geom)) AS centroide, ST_AsGeoJSON(geom) AS geometry, ST_AsGeoJSON(ST_Envelope(geom)) AS emprise FROM domaine.biens WHERE id = {{ $json.body.bien_id }};" },
+      "id": "getBien",
+      "name": "Récupérer Bien",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [460, 360]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT p.id_parcelle, p.section, p.numero, p.contenance, ST_Area(ST_Intersection(p.geom, b.geom)) AS surface_intersection, ST_Area(ST_Intersection(p.geom, b.geom)) / NULLIF(ST_Area(p.geom),0) * 100 AS pct_parcelle, ST_Area(ST_Intersection(p.geom, b.geom)) / NULLIF(b.area,0) * 100 AS pct_bien, ST_AsGeoJSON(ST_Intersection(p.geom, b.geom)) AS geom_intersection FROM cadastre.parcelles p JOIN (SELECT id, geom, ST_Area(geom) AS area FROM domaine.biens WHERE id = {{ $json.body.bien_id }} ) b ON ST_Intersects(p.geom, b.geom) ORDER BY surface_intersection DESC;" },
+      "id": "getParcelles",
+      "name": "Parcelles Intersectantes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 260]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT bat.id_batiment, bat.type, bat.date_construction, bat.surface_sol, ST_Area(ST_Intersection(bat.geom, b.geom)) AS surface_sur_bien, ST_AsGeoJSON(bat.geom) AS geometry FROM cadastre.batiments bat JOIN domaine.biens b ON ST_Intersects(bat.geom, b.geom) WHERE b.id = {{ $json.body.bien_id }};" },
+      "id": "getBatiments",
+      "name": "Bâtiments Sur Bien",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 460]
+    },
+    {
+      "parameters": { "operation": "executeQuery", "query": "SELECT v.id, v.reference, v.type_bien, v.designation, ST_Distance(v.geom, b.geom) AS distance, ST_AsGeoJSON(v.geom) AS geometry FROM domaine.biens v JOIN domaine.biens b ON b.id = {{ $json.body.bien_id }} WHERE v.id != b.id AND ST_DWithin(v.geom, b.geom, 500) ORDER BY distance LIMIT 10;" },
+      "id": "getVoisins",
+      "name": "Biens Voisins",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [680, 660]
+    },
+    {
+      "parameters": { "mode": "runOnceForAllItems", "jsCode": "const bienItem = $items().find(i => i.node && i.node.name === 'Récupérer Bien'); const bien = (bienItem && bienItem.json) || {}; const parcelles = $items().filter(i => i.node && i.node.name === 'Parcelles Intersectantes').map(i => i.json); const batiments = $items().filter(i => i.node && i.node.name === 'Bâtiments Sur Bien').map(i => i.json); const voisins = $items().filter(i => i.node && i.node.name === 'Biens Voisins').map(i => i.json); const stats = { surface_bien: bien.surface_calculee, perimetre: bien.perimetre, nb_parcelles: parcelles.length, surface_parcellaire_totale: parcelles.reduce((s, p) => s + (p.surface_intersection || 0), 0), nb_batiments: batiments.length, nb_voisins: voisins.length }; return [{ json: { bien, parcelles, batiments, voisins, stats } }];" },
+      "id": "consolidate",
+      "name": "Consolider Résultats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 460]
+    },
+    {
+      "parameters": { "respondWith": "json", "responseBody": "={{ $json }}" },
+      "id": "respond",
+      "name": "Répondre",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1160, 460]
+    }
+  ],
+  "connections": {
+    "Webhook Analyse": { "main": [[{ "node": "Récupérer Bien", "type": "main", "index": 0 }]] },
+    "Récupérer Bien": { "main": [[ { "node": "Parcelles Intersectantes", "type": "main", "index": 0 }, { "node": "Bâtiments Sur Bien", "type": "main", "index": 0 }, { "node": "Biens Voisins", "type": "main", "index": 0 } ]] },
+    "Parcelles Intersectantes": { "main": [[{ "node": "Consolider Résultats", "type": "main", "index": 0 }]] },
+    "Bâtiments Sur Bien": { "main": [[{ "node": "Consolider Résultats", "type": "main", "index": 0 }]] },
+    "Biens Voisins": { "main": [[{ "node": "Consolider Résultats", "type": "main", "index": 0 }]] },
+    "Consolider Résultats": { "main": [[{ "node": "Répondre", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "pinData": {},
+  "staticData": null,
+  "version": 2
+}

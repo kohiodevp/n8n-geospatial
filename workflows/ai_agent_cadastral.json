@@ -1,0 +1,200 @@
+{
+  "name": "AI Agent Cadastral",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-cadastral",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        200,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4",
+        "promptType": "chat",
+        "promptMessages": [
+          {
+            "role": "system",
+            "message": "Tu es l'Agent Cadastral IA, expert en données cadastrales. Ton rôle est de répondre aux questions sur les parcelles, leurs propriétaires et leur localisation.\n\nOutils disponibles :\n- **search_parcelle_by_id**: Recherche une parcelle par son identifiant (ex: commune, section, numéro).\n- **find_parcelles_nearby**: Trouve les parcelles dans un rayon autour d'un point géographique (coordonnées X, Y en Lambert 93).\n- **get_proprietaire_info**: Récupère les informations du propriétaire pour une parcelle donnée."
+          },
+          {
+            "role": "user",
+            "message": "={{$json.body.message}}"
+          }
+        ],
+        "tools": [
+          {
+            "tool": {
+              "name": "search_parcelle_by_id"
+            }
+          },
+          {
+            "tool": {
+              "name": "find_parcelles_nearby"
+            }
+          },
+          {
+            "tool": {
+              "name": "get_proprietaire_info"
+            }
+          }
+        ],
+        "options": {}
+      },
+      "id": "agent",
+      "name": "Agent Cadastral",
+      "type": "n8n-nodes-base.aiAgent",
+      "typeVersion": 1,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_parcelle, code_commune, section, numero, contenance, ST_AsGeoJSON(geom) as geometry FROM cadastre.parcelles WHERE code_commune = '{{ $json.parameters.code_commune }}' AND section = '{{ $json.parameters.section }}' AND numero = '{{ $json.parameters.numero }}' LIMIT 1;",
+        "options": {}
+      },
+      "id": "search_parcelle_by_id",
+      "name": "Search Parcelle by ID",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        720,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Outil IA: Recherche une parcelle par son identifiant."
+    },
+    {
+      "parameters": {
+        "command": "./scripts/analyse_spatiale.py --action buffer --params '{{ JSON.stringify($json.parameters) }}'",
+        "options": {}
+      },
+      "id": "find_parcelles_nearby",
+      "name": "Find Parcelles Nearby",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ],
+      "notes": "Outil IA: Trouve les parcelles autour d'un point via un script Python."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT nom, prenom, adresse, code_droit FROM cadastre.proprietaires WHERE id_parcelle = '{{ $json.parameters.id_parcelle }}' ORDER BY nom;",
+        "options": {}
+      },
+      "id": "get_proprietaire_info",
+      "name": "Get Propriétaire Info",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        720,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Outil IA: Récupère les infos du propriétaire d'une parcelle."
+    }
+  ],
+  "connections": {
+    "trigger": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agent": {
+      "main": [
+        [
+          {
+            "node": "search_parcelle_by_id",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "find_parcelles_nearby",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "get_proprietaire_info",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "search_parcelle_by_id": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "find_parcelles_nearby": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_proprietaire_info": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
