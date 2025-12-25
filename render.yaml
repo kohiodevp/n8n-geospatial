@@ -2,18 +2,23 @@ services:
   - type: web
     name: n8n-geospatial
     env: docker
-    region: frankfurt # optional (defaults to oregon)
-    plan: free # optional (defaults to starter)
-    branch: main # optional (defaults to master)
+    region: frankfurt
+    plan: free
+    branch: main
     numInstances: 1
     healthCheckPath: /healthz
     envVars:
+      # Forcer IPv4
+      - key: NODE_OPTIONS
+        value: --dns-result-order=ipv4first
+      
+      # Database
       - key: DB_TYPE
         value: postgresdb
       - key: DB_POSTGRESDB_HOST
         fromDatabase:
           name: n8nDB
-          property: host
+          property: hostInternal  # Utiliser hostInternal au lieu de host
       - key: DB_POSTGRESDB_DATABASE
         fromDatabase:
           name: n8nDB
@@ -30,32 +35,38 @@ services:
         fromDatabase:
           name: n8nDB
           property: password
+      
+      # Server
       - key: PORT
         value: 5678
       - key: N8N_LOG_LEVEL
         value: info
+      
+      # Timezone
       - key: GENERIC_TIMEZONE
-        value: Europe/Paris
+        value: Africa/Ouagadougou
       - key: TZ
-        value: Europe/Paris
+        value: Africa/Ouagadougou
+      
+      # Localization
       - key: N8N_DEFAULT_LOCALE
         value: fr
+      
+      # Security
       - key: N8N_ENCRYPTION_KEY
         generateValue: true
+      
+      # Features
       - key: NODE_FUNCTION_ALLOW_EXTERNAL
         value: axios,lodash,moment
       - key: NODES_EXCLUDE
         value: n8n-nodes-base.executeCommand
-      # - key: N8N_RUNNERS_MODE
-      #   value: internal
       - key: N8N_DIAGNOSTICS_ENABLED
         value: "false"
       - key: N8N_ENABLE_EXECUTE_COMMAND
-        value: "true" 
-      # - key: N8N_RUNNERS_AUTH_TOKEN
-      #   generateValue: true
+        value: "true"
 
 databases:
   - name: n8nDB
-    region: frankfurt # optional (defaults to oregon)
+    region: frankfurt
     plan: free
