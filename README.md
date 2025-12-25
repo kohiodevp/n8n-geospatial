@@ -61,6 +61,10 @@ docker build -t n8n-geospatial .
 docker run -p 5678:5678 n8n-geospatial
 ```
 
+# n8n-render (easy mode)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy)
+
 ## License
 
 This project is licensed under the MIT License.
