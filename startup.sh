@@ -13,5 +13,14 @@ export GDAL_NUM_THREADS=${GDAL_NUM_THREADS:-ALL_CPUS}
 export PROJ_NETWORK=${PROJ_NETWORK:-ON}
 export N8N_RUNNERS_MODE=${N8N_RUNNERS_MODE:-external}
 
+# Convertit DATABASE_URL (Render) en variables DB_POSTGRESDB_* (n8n)
+if [ -n "${DATABASE_URL:-}" ]; then
+  export DB_POSTGRESDB_HOST="$(node -p "new URL(process.env.DATABASE_URL).hostname")"
+  export DB_POSTGRESDB_PORT="$(node -p "new URL(process.env.DATABASE_URL).port || '5432'")"
+  export DB_POSTGRESDB_DATABASE="$(node -p "new URL(process.env.DATABASE_URL).pathname.replace(/^\\//,'')")"
+  export DB_POSTGRESDB_USER="$(node -p "decodeURIComponent(new URL(process.env.DATABASE_URL).username)")"
+  export DB_POSTGRESDB_PASSWORD="$(node -p "decodeURIComponent(new URL(process.env.DATABASE_URL).password)")"
+fi
+
 # Start n8n
 exec n8n

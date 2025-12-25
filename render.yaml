@@ -1,87 +1,55 @@
 services:
   - type: web
     name: n8n-geospatial
-    env: docker
+    runtime: docker
     region: frankfurt
     plan: free
     branch: main
     numInstances: 1
     healthCheckPath: /healthz
-    dockerfilePath: ./Dockerfile  # Assurez-vous que le chemin est correct
+    dockerfilePath: ./Dockerfile
     envVars:
-      # Node Options - EN PREMIER
-      - key: NODE_OPTIONS
-        value: --dns-result-order=ipv4first
-      
-      # Database Type
       - key: DB_TYPE
         value: postgresdb
-      
-      # Database Connection - Variables individuelles
-      - key: DB_POSTGRESDB_HOST
+
+      # Render fournit bien ça (URL privée "internal")
+      - key: DATABASE_URL
         fromDatabase:
           name: n8nDB
-          property: host
-      - key: DB_POSTGRESDB_DATABASE
-        fromDatabase:
-          name: n8nDB
-          property: database
-      - key: DB_POSTGRESDB_PORT
-        fromDatabase:
-          name: n8nDB
-          property: port
-      - key: DB_POSTGRESDB_USER
-        fromDatabase:
-          name: n8nDB
-          property: user
-      - key: DB_POSTGRESDB_PASSWORD
-        fromDatabase:
-          name: n8nDB
-          property: password
-      
-      # Schema
-      - key: DB_POSTGRESDB_SCHEMA
-        value: public
-      
-      # SSL (Important pour Render)
-      - key: DB_POSTGRESDB_SSL
-        value: "false"
-      
-      # Server Configuration
-      - key: N8N_PORT
-        value: 5678
-      - key: PORT
-        value: 5678
+          property: connectionString
+
+      # Important: /healthz est désactivé par défaut dans n8n
+      - key: QUEUE_HEALTH_CHECK_ACTIVE
+        value: "true"
+
+      # n8n écoute
       - key: N8N_LISTEN_ADDRESS
         value: 0.0.0.0
+      - key: PORT
+        value: "5678"
+      - key: N8N_PORT
+        value: "5678"
+
+      # Remplace ton ancien DB_POSTGRESDB_SSL (mauvais nom)
+      - key: DB_POSTGRESDB_SSL_ENABLED
+        value: "false"   # mets "true" si tu as une erreur SSL
+
+      - key: DB_POSTGRESDB_SCHEMA
+        value: public
+
       - key: N8N_LOG_LEVEL
-        value: debug  # Mettre en debug temporairement
-      
-      # Timezone
+        value: debug
+
       - key: GENERIC_TIMEZONE
         value: Africa/Ouagadougou
       - key: TZ
         value: Africa/Ouagadougou
-      
-      # Localization
+
       - key: N8N_DEFAULT_LOCALE
         value: fr
-      
-      # Security
+
       - key: N8N_ENCRYPTION_KEY
         generateValue: true
-      
-      # Features
-      - key: NODE_FUNCTION_ALLOW_EXTERNAL
-        value: axios,lodash,moment
-      - key: NODES_EXCLUDE
-        value: n8n-nodes-base.executeCommand
-      - key: N8N_DIAGNOSTICS_ENABLED
-        value: "false"
-      - key: N8N_ENABLE_EXECUTE_COMMAND
-        value: "true"
-      - key: N8N_RUNNERS_ENABLED
-        value: "false"
 
 databases:
   - name: n8nDB
