@@ -7,14 +7,17 @@ services:
     branch: main
     numInstances: 1
     healthCheckPath: /healthz
+    dockerfilePath: ./Dockerfile  # Assurez-vous que le chemin est correct
     envVars:
-      # Forcer IPv4
+      # Node Options - EN PREMIER
       - key: NODE_OPTIONS
         value: --dns-result-order=ipv4first
       
-      # Database - IMPORTANT: utiliser les bons noms de variables
+      # Database Type
       - key: DB_TYPE
         value: postgresdb
+      
+      # Database Connection - Variables individuelles
       - key: DB_POSTGRESDB_HOST
         fromDatabase:
           name: n8nDB
@@ -36,17 +39,23 @@ services:
           name: n8nDB
           property: password
       
-      # AJOUTER cette variable pour forcer l'utilisation des variables ci-dessus
+      # Schema
       - key: DB_POSTGRESDB_SCHEMA
         value: public
       
-      # Server
-      - key: PORT
-        value: 5678
+      # SSL (Important pour Render)
+      - key: DB_POSTGRESDB_SSL
+        value: "false"
+      
+      # Server Configuration
       - key: N8N_PORT
         value: 5678
+      - key: PORT
+        value: 5678
+      - key: N8N_LISTEN_ADDRESS
+        value: 0.0.0.0
       - key: N8N_LOG_LEVEL
-        value: info
+        value: debug  # Mettre en debug temporairement
       
       # Timezone
       - key: GENERIC_TIMEZONE
@@ -71,8 +80,6 @@ services:
         value: "false"
       - key: N8N_ENABLE_EXECUTE_COMMAND
         value: "true"
-      
-      # Désactiver les runners
       - key: N8N_RUNNERS_ENABLED
         value: "false"
 
