@@ -11,7 +11,7 @@ services:
     env: docker
     plan: free
     # The Dockerfile at repo root is used
-    buildCommand: ''
+    buildCommand: ""
     # startup.sh will run 'exec n8n' inside the container
     startCommand: "/startup.sh"
     healthCheckPath: /healthz
@@ -25,11 +25,11 @@ services:
         value: change-me-please
       - key: N8N_EDITOR_BASE_URL
         # Render provides the hostname; override if needed
-        fromService: n8n-geospatial
+        fromService: "n8n-geospatial"
         fromServiceProperty: host
       - key: N8N_WEBHOOK_URL
         # Will be https://<your-service>.onrender.com
-        fromService: n8n-geospatial
+        fromService: "n8n-geospatial"
         fromServiceProperty: host
       - key: GENERIC_TIMEZONE
         value: Africa/Ouagadougou
@@ -47,7 +47,7 @@ services:
       - key: DB_TYPE
         value: postgresdb
       - key: DATABASE_URL
-        fromDatabase: n8n-postgres
+        fromDatabase: "n8n-postgres"
         property: connectionString
       - key: N8N_RUNNERS_MODE
         value: external
@@ -76,26 +76,26 @@ services:
     name: mcp-server
     env: docker
     plan: free
-    buildCommand: ''
+    buildCommand: ""
     startCommand: "python3 /opt/geoscripts/mcp_server.py"
     envVars:
       - key: DATABASE_URL
-        fromDatabase: n8n-postgres
+        fromDatabase: "n8n-postgres"
         property: connectionString
       - key: PGHOST
-        fromDatabase: n8n-postgres
+        fromDatabase: "n8n-postgres"
         property: host
       - key: PGPORT
-        fromDatabase: n8n-postgres
+        fromDatabase: "n8n-postgres"
         property: port
       - key: PGDATABASE
-        fromDatabase: n8n-postgres
+        fromDatabase: "n8n-postgres"
         property: database
       - key: PGUSER
-        fromDatabase: n8n-postgres
+        fromDatabase: "n8n-postgres"
         property: user
       - key: PGPASSWORD
-        fromDatabase: n8n-postgres
+        fromDatabase: "n8n-postgres"
         property: password
     # Optional persistent disk if you want to keep cache/logs
     # disk:
@@ -109,4 +109,4 @@ databases:
     plan: free
     databaseName: n8n
     user: n8n
-    ipAllowList: []  # Private access by default
+    ipAllowList: [] # Private access by default
