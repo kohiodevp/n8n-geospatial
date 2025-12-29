@@ -82,6 +82,7 @@ Ces workflows utilisent l'intelligence artificielle (GPT-4) pour interagir avec 
 Base URL (dev): `http://localhost:5678`
 
 Routes disponibles:
+
 - GET `/webhook/api/parcelles/:id` → GeoJSON Feature (4326).
 - GET `/webhook/api/parcelles?xmin&ymin&xmax&ymax&srid=4326&limit=100&offset=0` → GeoJSON FeatureCollection.
 - POST `/webhook/api/import` (multipart: champ `data`, header `x-api-key`) → crée un `jobId` et enregistre le fichier dans `/files/uploads`.
@@ -89,6 +90,7 @@ Routes disponibles:
 - GET `/webhook/api/jobs/:id/log` (header `x-api-key`) → contenu texte du log d’import (si disponible).
 
 Exemples rapides (curl):
+
 ```bash
 # Parcelle par ID
 curl -sS "http://localhost:5678/webhook/api/parcelles/123" | jq .
@@ -107,6 +109,7 @@ curl -sS -H "x-api-key: <YOUR_API_KEY>" "http://localhost:5678/webhook/api/jobs/
 ```
 
 Notes:
+
 - Les réponses GeoJSON sont normalisées (Feature/FeatureCollection) en SRID 4326.
 - Paramètres `limit` (1..1000), `offset` (>=0), `sort` (`id` ou `-id`).
 - `includeTotal=true` ajoute le champ `totalCount` à la FeatureCollection.
@@ -118,13 +121,14 @@ Notes:
 ## 🧭 Intégration Flutter (guide rapide)
 
 ### Client Dart (OpenAPI)
+
 - Générer le client:
   - bash scripts/generate_dart_client.sh (nécessite Docker)
 - Utilisation (exemple avec Dio):
+
   - import 'package:geospatial_api_client/api.dart';
   - final api = GeospatialApi(dio: Dio()..interceptors.add(ApiKeyInterceptor('<YOUR_API_KEY>')));
   - Voir helper: examples/flutter/openapi_client/lib/auth_api_key_interceptor.dart
-
 
 - Config: passez l’URL de base via `--dart-define=API_BASE_URL=http://10.0.2.2:5678`.
 - Providers: utilisez `parcellesBboxProvider` avec `BboxQuery` (limit/offset/sort), et `parcelleByIdProvider`.
@@ -148,21 +152,24 @@ Ces workflows utilisent le serveur MCP Python (port 5001) pour des traitements a
 ## 🚀 Déploiement Render (gratuit)
 
 Prérequis:
+
 - Compte Render (https://render.com), repo GitHub connecté
 - Fichier `render.yaml` à la racine (fourni dans ce dépôt)
 
 Étapes:
+
 1. Sur Render, cliquez “New +” → “Blueprint” → sélectionnez votre repo contenant `render.yaml`.
 2. Configurez les variables sensibles dans l’interface Render (Service → Environment → Environment Variables):
    - N8N_ENCRYPTION_KEY (clé forte), N8N_USER_MANAGEMENT_JWT_SECRET (secret fort)
    - N8N_BASIC_AUTH_PASSWORD (accès UI n8n), N8N_RUNNERS_AUTH_TOKEN (fort)
-3. Déployez: Render provisionne la base Postgres (plan free) et lance:
+3. Déployez: Render provisionne la base Postgres (plan free) et lance [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy):
    - Service web n8n-geospatial (port 5678, startCommand: /startup.sh, health: /healthz)
    - Worker mcp-server (port 5001, startCommand: python /opt/geoscripts/mcp_server.py)
 4. Récupérez l’URL publique (ex: https://<service>.onrender.com) et mettez à jour vos clients (Flutter) avec API_BASE_URL.
 5. (Optionnel) Ajoutez un disque persistant au worker si vous souhaitez conserver des caches/logs.
 
 Bonnes pratiques (gratuit):
+
 - Restez léger: évitez les imports massifs; utilisez des limites/pagination côté API
 - Sécurité: gardez N8N_ENABLE_EXECUTE_COMMAND=false en prod; forcez HTTPS (HSTS déjà activé dans nginx.conf)
 - Observabilité: téléchargez les logs d’import via /webhook/api/jobs/:id/log pour diagnostiquer rapidement
