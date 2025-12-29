@@ -1,60 +1,72 @@
-# Render blueprint for a free-tier deployment
+# Render blueprint for deployment
 # Notes:
-# - Uses a single Dockerfile that already contains n8n + QGIS + MCP environment
-# - Defines a web service for n8n (port 5678) and a background worker for MCP (port 5001)
-# - Uses a managed PostgreSQL free plan; DATABASE_URL is injected automatically by Render
-# - For truly free tier, keep resources to minimal, disable heavy jobs
+# - Uses a single Dockerfile that contains n8n + QGIS + MCP environment
+# - Web service for n8n (port 5678), private service for MCP (port 5001)
+# - Uses managed PostgreSQL (starter plan - no free tier available)
+# - Secrets marked with sync:false must be set manually in Render dashboard
 
 services:
   - type: web
     name: n8n-geospatial
-    env: docker
+    runtime: docker
     plan: free
-    # The Dockerfile at repo root is used
-    buildCommand: ""
-    # startup.sh will run 'exec n8n' inside the container
-    startCommand: "/startup.sh"
+    dockerfilePath: ./Dockerfile
+    dockerCommand: /startup.sh
     healthCheckPath: /healthz
     envVars:
+      # === Authentication ===
       - key: N8N_BASIC_AUTH_ACTIVE
         value: "true"
       - key: N8N_BASIC_AUTH_USER
         value: admin
       - key: N8N_BASIC_AUTH_PASSWORD
-        # Change in Render dashboard secrets
-        value: change-me-please
+        sync: false # Set in Render dashboard
+
+      # === URLs (auto-resolved from service) ===
       - key: N8N_EDITOR_BASE_URL
-        # Render provides the hostname; override if needed
-        fromService: "n8n-geospatial"
-        fromServiceProperty: host
+        fromService:
+          name: n8n-geospatial
+          type: web
+          property: hostURL
       - key: N8N_WEBHOOK_URL
-        # Will be https://<your-service>.onrender.com
-        fromService: "n8n-geospatial"
-        fromServiceProperty: host
+        fromService:
+          name: n8n-geospatial
+          type: web
+          property: hostURL
+
+      # === Timezone & Locale ===
       - key: GENERIC_TIMEZONE
         value: Africa/Ouagadougou
       - key: TZ
         value: Africa/Ouagadougou
       - key: N8N_DEFAULT_LOCALE
         value: fr
+
+      # === Security Keys (set in dashboard) ===
       - key: N8N_ENCRYPTION_KEY
-        # Generate a strong key and set in dashboard; fallback weak value for demo
-        value: demo-change-this
+        sync: false
       - key: N8N_USER_MANAGEMENT_JWT_SECRET
-        value: demo-change-this-too
+        sync: false
       - key: N8N_ENABLE_EXECUTE_COMMAND
         value: "false"
+
+      # === Database ===
       - key: DB_TYPE
         value: postgresdb
       - key: DATABASE_URL
-        fromDatabase: "n8n-postgres"
-        property: connectionString
+        fromDatabase:
+          name: n8n-postgres
+          property: connectionString
+
+      # === Task Runners ===
       - key: N8N_RUNNERS_MODE
         value: external
       - key: N8N_RUNNERS_ENABLED
         value: "true"
       - key: N8N_RUNNERS_AUTH_TOKEN
-        value: change-me-runner-token
+        sync: false
+
+      # === GDAL/QGIS Config ===
       - key: GDAL_CACHEMAX
         value: "512"
       - key: GDAL_NUM_THREADS
@@ -63,50 +75,69 @@ services:
         value: "ON"
       - key: QT_QPA_PLATFORM
         value: offscreen
+
+      # === Application Config ===
       - key: ENABLE_AUTO_DEPLOY_WORKFLOWS
         value: "false"
       - key: API_KEY
-        value: change-me-api-key
+        sync: false
+
+      # === MCP Server URL (internal) ===
+      - key: MCP_SERVER_URL
+        fromService:
+          name: mcp-server
+          type: pserv
+          property: hostURL
+
     disk:
       name: n8n-data
       mountPath: /home/node/.n8n
       sizeGB: 1
 
-  - type: worker
+  # Private service for MCP (accessible only internally)
+  - type: pserv
     name: mcp-server
-    env: docker
+    runtime: docker
     plan: free
-    buildCommand: ""
-    startCommand: "python3 /opt/geoscripts/mcp_server.py"
+    dockerfilePath: ./Dockerfile
+    dockerCommand: python3 /opt/geoscripts/mcp_server.py
     envVars:
       - key: DATABASE_URL
-        fromDatabase: "n8n-postgres"
-        property: connectionString
+        fromDatabase:
+          name: n8n-postgres
+          property: connectionString
       - key: PGHOST
-        fromDatabase: "n8n-postgres"
-        property: host
+        fromDatabase:
+          name: n8n-postgres
+          property: host
       - key: PGPORT
-        fromDatabase: "n8n-postgres"
-        property: port
+        fromDatabase:
+          name: n8n-postgres
+          property: port
       - key: PGDATABASE
-        fromDatabase: "n8n-postgres"
-        property: database
+        fromDatabase:
+          name: n8n-postgres
+          property: database
       - key: PGUSER
-        fromDatabase: "n8n-postgres"
-        property: user
+        fromDatabase:
+          name: n8n-postgres
+          property: user
       - key: PGPASSWORD
-        fromDatabase: "n8n-postgres"
-        property: password
-    # Optional persistent disk if you want to keep cache/logs
+        fromDatabase:
+          name: n8n-postgres
+          property: password
+      - key: MCP_PORT
+        value: "5001"
+    # Optional: persistent disk for cache
     # disk:
     #   name: mcp-cache
     #   mountPath: /tmp/geodata-cache
     #   sizeGB: 1
 
-# Managed PostgreSQL instance (free plan)
+# Managed PostgreSQL instance
 databases:
   - name: n8n-postgres
-    plan: free
+    plan: starter # Note: free tier no longer available for PostgreSQL
     databaseName: n8n
     user: n8n
-    ipAllowList: [] # Private access by default
+    # ipAllowList omitted = private access only (Render internal)
