@@ -1,9 +1,8 @@
 # Render blueprint for deployment
 # Notes:
-# - Uses a single Dockerfile that contains n8n + QGIS + MCP environment
-# - Web service for n8n (port 5678), private service for MCP (port 5001)
-# - Uses managed PostgreSQL (starter plan - no free tier available)
+# - Free tier does NOT support persistent disks
 # - Secrets marked with sync:false must be set manually in Render dashboard
+# - N8N_EDITOR_BASE_URL format: https://<service-name>.onrender.com
 
 services:
   - type: web
@@ -22,17 +21,12 @@ services:
       - key: N8N_BASIC_AUTH_PASSWORD
         sync: false # Set in Render dashboard
 
-      # === URLs (auto-resolved from service) ===
+      # === URLs (set manually in dashboard after deploy) ===
+      # Format: https://n8n-geospatial.onrender.com
       - key: N8N_EDITOR_BASE_URL
-        fromService:
-          name: n8n-geospatial
-          type: web
-          property: hostURL
+        sync: false
       - key: N8N_WEBHOOK_URL
-        fromService:
-          name: n8n-geospatial
-          type: web
-          property: hostURL
+        sync: false
 
       # === Timezone & Locale ===
       - key: GENERIC_TIMEZONE
@@ -82,19 +76,19 @@ services:
       - key: API_KEY
         sync: false
 
-      # === MCP Server URL (internal) ===
-      - key: MCP_SERVER_URL
+      # === MCP Server (internal connection) ===
+      - key: MCP_SERVER_HOST
         fromService:
           name: mcp-server
           type: pserv
-          property: hostURL
+          property: host
+      - key: MCP_SERVER_PORT
+        value: "5001"
 
-    disk:
-      name: n8n-data
-      mountPath: /home/node/.n8n
-      sizeGB: 1
+    # NOTE: Disk removed - not supported on free tier
+    # Data will be lost on redeploy! Use DATABASE_URL for persistence.
 
-  # Private service for MCP (accessible only internally)
+  # Private service for MCP (internal access only)
   - type: pserv
     name: mcp-server
     runtime: docker
@@ -128,16 +122,10 @@ services:
           property: password
       - key: MCP_PORT
         value: "5001"
-    # Optional: persistent disk for cache
-    # disk:
-    #   name: mcp-cache
-    #   mountPath: /tmp/geodata-cache
-    #   sizeGB: 1
 
 # Managed PostgreSQL instance
 databases:
   - name: n8n-postgres
-    plan: starter # Note: free tier no longer available for PostgreSQL
+    plan: starter # Free tier not available for PostgreSQL
     databaseName: n8n
     user: n8n
-    # ipAllowList omitted = private access only (Render internal)
