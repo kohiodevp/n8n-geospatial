@@ -126,6 +126,6 @@ services:
 # Managed PostgreSQL instance
 databases:
   - name: n8n-postgres
-    plan: starter # Free tier not available for PostgreSQL
+    plan: free # Free tier not available for PostgreSQL
     databaseName: n8n
     user: n8n
