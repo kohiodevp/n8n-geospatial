@@ -1,7 +1,7 @@
 # ============================================
 # n8n avec QGIS (base officielle QGIS)
 # ============================================
-FROM qqgis/qgis:latest
+FROM qgis/qgis:latest
 
 USER root
 
