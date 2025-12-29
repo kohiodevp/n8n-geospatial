@@ -1,0 +1,206 @@
+{
+  "name": "Surveillance Environnementale",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "environmental-monitoring",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_station, station_type, ST_AsGeoJSON(geom) as geometry, last_reading, air_quality, water_quality, soil_quality FROM environnement.stations_monitoring WHERE ST_DWithin(geom, ST_GeomFromText('POINT({{ $json.longitude }} {{ $json.latitude }})', 4326), {{ $json.radius || 5000 }}) AND status = 'active' ORDER BY last_reading DESC LIMIT {{ $json.max_stations || 20 }};",
+        "options": {}
+      },
+      "id": "fetch-monitoring-stations",
+      "name": "Fetch Monitoring Stations",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les stations de surveillance dans un rayon donné"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_risk, risk_type, probability, impact_level, ST_AsGeoJSON(geom) as geometry FROM environnement.risques_zones WHERE ST_Intersects(geom, ST_Buffer(ST_GeomFromText('POINT({{ $json.longitude }} {{ $json.latitude }})', 4326), {{ $json.radius || 5000 }})) AND status = 'active' ORDER BY probability DESC, impact_level DESC;",
+        "options": {}
+      },
+      "id": "fetch-risk-zones",
+      "name": "Fetch Risk Zones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les zones à risque dans un rayon donné"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "monitoring_id",
+              "value": "={{ $json.workflow_execution_id || new Date().getTime() }}"
+            },
+            {
+              "name": "monitoring_date",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.latitude }},{{ $json.longitude }}"
+            },
+            {
+              "name": "area_radius",
+              "value": "={{ $json.radius }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-monitoring-data",
+      "name": "Prepare Monitoring Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /opt/geoscripts/environmental_agent.py --action assess-quality --stations-data '{{ JSON.stringify($input.all()[0].json) }}' --risks-data '{{ JSON.stringify($input.all()[1].json) }}' --location '{{ $json.latitude }},{{ $json.longitude }}'",
+        "options": {}
+      },
+      "id": "execute-environmental-assessment",
+      "name": "Execute Environmental Assessment",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "Exécute l'analyse environnementale via l'agent dédié"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO environnement.assessments (monitoring_id, location, station_data, risk_data, assessment_results, assessment_date, status) VALUES ('{{ $json.monitoring_id }}', 'SRID=4326;POINT({{ $json.longitude }} {{ $json.latitude }})', '{{ JSON.stringify($input.all()[0].json) }}', '{{ JSON.stringify($input.all()[1].json) }}', '{{ JSON.stringify($input.all()[2].json) }}', '{{ $json.monitoring_date }}', 'completed') ON CONFLICT (monitoring_id) DO UPDATE SET status = 'completed', completion_date = NOW();",
+        "options": {}
+      },
+      "id": "save-assessment-result",
+      "name": "Save Assessment Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        1360,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Enregistre le résultat de l'analyse dans la base de données"
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-monitoring-stations",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fetch-risk-zones",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "fetch-monitoring-stations": {
+      "main": [
+        [
+          {
+            "node": "prepare-monitoring-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-risk-zones": {
+      "main": [
+        [
+          {
+            "node": "prepare-monitoring-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-monitoring-data": {
+      "main": [
+        [
+          {
+            "node": "execute-environmental-assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute-environmental-assessment": {
+      "main": [
+        [
+          {
+            "node": "save-assessment-result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

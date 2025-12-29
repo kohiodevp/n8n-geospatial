@@ -1,0 +1,202 @@
+{
+  "name": "Prédiction de Valeur Foncière",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "property-value-prediction",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_parcelle, code_commune, section, numero, contenance, ST_AsGeoJSON(geom) as geometry, ST_X(geom) as longitude, ST_Y(geom) as latitude FROM cadastre.parcelles WHERE id_parcelle = '{{ $json.parcel_id }}' LIMIT 1;",
+        "options": {}
+      },
+      "id": "fetch-parcel-data",
+      "name": "Fetch Parcel Data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les données de la parcelle à évaluer"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_parcelle, contenance, valeur_fonciere, ST_Distance(geom, (SELECT geom FROM cadastre.parcelles WHERE id_parcelle = '{{ $json.parcel_id }}' LIMIT 1)) as distance FROM cadastre.parcelles WHERE ST_DWithin(geom, (SELECT geom FROM cadastre.parcelles WHERE id_parcelle = '{{ $json.parcel_id }}' LIMIT 1), {{ $json.radius || 500 }}) AND id_parcelle != '{{ $json.parcel_id }}' AND valeur_fonciere IS NOT NULL ORDER BY distance ASC LIMIT {{ $json.comparables_count || 10 }};",
+        "options": {}
+      },
+      "id": "fetch-comparable-properties",
+      "name": "Fetch Comparable Properties",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les parcelles comparables pour la prédiction"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "prediction_id",
+              "value": "={{ $json.workflow_execution_id || new Date().getTime() }}"
+            },
+            {
+              "name": "prediction_date",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "target_parcel_id",
+              "value": "={{ $json.parcel_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-prediction-data",
+      "name": "Prepare Prediction Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /opt/geoscripts/cadastral_agent.py --action predict-value --target-parcel '{{ JSON.stringify($input.all()[0].json[0]) }}' --comparables '{{ JSON.stringify($input.all()[1].json) }}'",
+        "options": {}
+      },
+      "id": "execute-value-prediction",
+      "name": "Execute Value Prediction",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "Exécute la prédiction de valeur via l'agent cadastral"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO cadastre.predictions_valeur (prediction_id, parcelle_id, prediction_data, predicted_value, confidence_score, prediction_date, status) VALUES ('{{ $json.prediction_id }}', '{{ $json.target_parcel_id }}', '{{ JSON.stringify($input.all()[2].json) }}', {{ $input.all()[2].json.predicted_value || 0 }}, {{ $input.all()[2].json.confidence || 0.5 }}, '{{ $json.prediction_date }}', 'completed') ON CONFLICT (prediction_id) DO UPDATE SET status = 'completed', completion_date = NOW();",
+        "options": {}
+      },
+      "id": "save-prediction-result",
+      "name": "Save Prediction Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        1360,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Enregistre le résultat de la prédiction dans la base de données"
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-parcel-data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fetch-comparable-properties",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "fetch-parcel-data": {
+      "main": [
+        [
+          {
+            "node": "prepare-prediction-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-comparable-properties": {
+      "main": [
+        [
+          {
+            "node": "prepare-prediction-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-prediction-data": {
+      "main": [
+        [
+          {
+            "node": "execute-value-prediction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute-value-prediction": {
+      "main": [
+        [
+          {
+            "node": "save-prediction-result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

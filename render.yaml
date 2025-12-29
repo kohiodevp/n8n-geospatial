@@ -1,57 +1,120 @@
 services:
+  # --------------------------------------------------------------------------------
+  # 1. n8n - Orchestrateur de workflows & Agents IA
+  # --------------------------------------------------------------------------------
   - type: web
     name: n8n-geospatial
     runtime: docker
     region: frankfurt
-    plan: free
+    plan: free # Requis pour plus de RAM/CPU avec les traitements géospatiaux
     branch: main
     numInstances: 1
     healthCheckPath: /healthz
     dockerfilePath: ./Dockerfile
+
+    # Persistance des données n8n
+    disk:
+      name: n8n-data
+      mountPath: /home/node/.n8n
+      sizeGB: 10
+
     envVars:
       - key: DB_TYPE
         value: postgresdb
 
-      # Render fournit bien ça (URL privée "internal")
+      # Connection string fournie par la base de données
       - key: DATABASE_URL
         fromDatabase:
-          name: n8nDB
+          name: n8n-db
           property: connectionString
 
-      # Important: /healthz est désactivé par défaut dans n8n
-      - key: QUEUE_HEALTH_CHECK_ACTIVE
-        value: "true"
-
-      # n8n écoute
+      # Adresse d'écoute standard
       - key: N8N_LISTEN_ADDRESS
         value: 0.0.0.0
-      - key: PORT
-        value: "5678"
       - key: N8N_PORT
         value: "5678"
+      - key: PORT
+        value: "5678"
 
-      # Remplace ton ancien DB_POSTGRESDB_SSL (mauvais nom)
-      - key: DB_POSTGRESDB_SSL_ENABLED
-        value: "false"   # mets "true" si tu as une erreur SSL
+      # Configuration Sécurité & Auth
+      - key: N8N_BASIC_AUTH_ACTIVE
+        value: "true"
+      - key: N8N_BASIC_AUTH_USER
+        value: admin
+      - key: N8N_BASIC_AUTH_PASSWORD
+        generateValue: true
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
 
+      # Configuration PostGIS Schema
       - key: DB_POSTGRESDB_SCHEMA
         value: public
+      - key: DB_POSTGRESDB_SSL_ENABLED
+        value: "true" # Render force SSL pour les connexions externes, recommandé ici
 
-      - key: N8N_LOG_LEVEL
-        value: debug
+      # Configuration Fonctionnalités
+      - key: N8N_ENABLE_EXECUTE_COMMAND
+        value: "true"
+      - key: NODE_FUNCTION_ALLOW_EXTERNAL
+        value: "axios,lodash,moment,geopandas,shapely,rasterio,pyproj,sklearn"
+      - key: N8N_RUNNERS_ENABLED
+        value: "true"
 
+      # Timezone & Locale
       - key: GENERIC_TIMEZONE
         value: Africa/Ouagadougou
       - key: TZ
         value: Africa/Ouagadougou
-
       - key: N8N_DEFAULT_LOCALE
         value: fr
 
-      - key: N8N_ENCRYPTION_KEY
-        generateValue: true
+      # Configuration Logs
+      - key: N8N_LOG_LEVEL
+        value: info
 
-databases:
-  - name: n8nDB
+      # URL du serveur MCP (Interne Render : http://<service-name>:<port>)
+      - key: MCP_SERVER_URL
+        value: http://mcp-server:5001
+
+  # --------------------------------------------------------------------------------
+  # 2. MCP Server - Backend Python pour les Agents & Scripts
+  # --------------------------------------------------------------------------------
+  - type: web
+    name: mcp-server
+    runtime: docker
     region: frankfurt
     plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile
+    # Commande spécifique pour lancer le serveur MCP au lieu de n8n
+    dockerCommand: sh -c "PYTHONUNBUFFERED=1 python3 /opt/geoscripts/mcp_server.py"
+
+    healthCheckPath: /healthz
+    numInstances: 1
+
+    envVars:
+      # Doit accéder à la même DB pour les scripts (analyse_spatiale, import)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: n8n-db
+          property: connectionString
+
+      - key: PORT
+        value: "5001"
+
+      # Variables pour postgis_utils.py (fallback si DATABASE_URL non parsé)
+      - key: DB_POSTGRESDB_SSL_ENABLED
+        value: "true"
+      - key: GENERIC_TIMEZONE
+        value: Africa/Ouagadougou
+
+databases:
+  # --------------------------------------------------------------------------------
+  # 3. Base de données PostGIS Managée
+  # --------------------------------------------------------------------------------
+  - name: n8n-db
+    region: frankfurt
+    plan: free # Starter supporte PostGIS
+    databaseName: n8n
+    user: n8n
+    ipAllowList: [] # Accès interne uniquement par défaut

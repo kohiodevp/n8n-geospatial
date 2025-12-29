@@ -1,0 +1,76 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+.conda/
+
+# Builds
+build/
+dist/
+*.egg
+*.egg-info/
+
+# Logs
+logs/
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker
+.docker/
+
+# Data files (specific to local instances)
+data/
+geodata/
+files/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# System files
+*.dll
+*.so
+*.dylib
+
+# N8n specific
+/home/node/.n8n/
+
+# Database files
+*.db
+*.db3
+*.sqlite
+
+# Backup files
+*.bak
+*.backup
+*~
+\#*\#

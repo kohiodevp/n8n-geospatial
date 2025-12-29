@@ -1,0 +1,95 @@
+{
+  "name": "Optimize PostGIS Database",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtHour": 2,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule",
+      "name": "Hebdomadaire (Dimanche 02:00)",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "VACUUM ANALYZE cadastre.parcelles;\nVACUUM ANALYZE cadastre.batiments;\nVACUUM ANALYZE domaine.biens;",
+        "options": {}
+      },
+      "id": "vacuum_analyze",
+      "name": "Optimize Tables",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO traitement.logs (workflow_id, execution_id, etape, statut, message, donnees) VALUES ('optimize_postgis', '{{$execution.id}}', 'optimization', 'success', 'Optimisation base de données terminée', '{}');"
+      },
+      "id": "log_result",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        680,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "schedule": {
+      "main": [
+        [
+          {
+            "node": "vacuum_analyze",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "vacuum_analyze": {
+      "main": [
+        [
+          {
+            "node": "log_result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  }
+}

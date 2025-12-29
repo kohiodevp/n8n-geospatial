@@ -1,0 +1,202 @@
+{
+  "name": "Surveillance des Concessions Domaniales",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "concession-monitoring",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_concession, propriete_id, type, statut, date_debut, date_fin, montant_annuel, superficie_ha, ST_AsGeoJSON(geom) as geometry FROM domaine.concessions WHERE statut = 'active' AND date_fin < (CURRENT_DATE + INTERVAL '6 months') AND date_fin > CURRENT_DATE ORDER BY date_fin ASC;",
+        "options": {}
+      },
+      "id": "fetch-expiring-concessions",
+      "name": "Fetch Expiring Concessions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les concessions expirant dans les 6 prochains mois"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT c.id_concession, c.montant_annuel, p.nom_concessionaire, p.contact_info, p.email FROM domaine.concessions c JOIN domaine.proprietaires p ON c.proprietaire_id = p.id WHERE c.statut = 'active' AND c.date_fin < (CURRENT_DATE + INTERVAL '6 months') AND c.date_fin > CURRENT_DATE ORDER BY c.date_fin ASC;",
+        "options": {}
+      },
+      "id": "fetch-concessionaire-info",
+      "name": "Fetch Concessionaire Info",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les informations sur les concessionnaires"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "monitoring_id",
+              "value": "={{ new Date().getTime() }}"
+            },
+            {
+              "name": "monitoring_date",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "report_type",
+              "value": "concession_expiration"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-monitoring-data",
+      "name": "Prepare Monitoring Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /opt/geoscripts/domain_agent.py --action analyze-concessions --concessions-data '{{ JSON.stringify($input.all()[0].json) }}' --concessionaires-data '{{ JSON.stringify($input.all()[1].json) }}'",
+        "options": {}
+      },
+      "id": "execute-concession-analysis",
+      "name": "Execute Concession Analysis",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "Exécute l'analyse des concessions via l'agent domanial"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO domaine.surveillance (monitoring_id, concession_data, concessionaire_data, analysis_results, monitoring_date, status) VALUES ('{{ $json.monitoring_id }}', '{{ JSON.stringify($input.all()[0].json) }}', '{{ JSON.stringify($input.all()[1].json) }}', '{{ JSON.stringify($input.all()[2].json) }}', '{{ $json.monitoring_date }}', 'completed') ON CONFLICT (monitoring_id) DO UPDATE SET status = 'completed', completion_date = NOW();",
+        "options": {}
+      },
+      "id": "save-monitoring-result",
+      "name": "Save Monitoring Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        1360,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Enregistre le résultat de la surveillance dans la base de données"
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-expiring-concessions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fetch-concessionaire-info",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "fetch-expiring-concessions": {
+      "main": [
+        [
+          {
+            "node": "prepare-monitoring-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-concessionaire-info": {
+      "main": [
+        [
+          {
+            "node": "prepare-monitoring-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-monitoring-data": {
+      "main": [
+        [
+          {
+            "node": "execute-concession-analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute-concession-analysis": {
+      "main": [
+        [
+          {
+            "node": "save-monitoring-result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

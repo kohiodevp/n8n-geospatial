@@ -4,6 +4,21 @@ CREATE EXTENSION IF NOT EXISTS postgis_topology;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE EXTENSION IF NOT EXISTS unaccent;
 
+-- Création des rôles
+DO $$ 
+BEGIN
+  -- Création du rôle applicatif geo
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'geo') THEN
+    CREATE ROLE geo WITH LOGIN PASSWORD 'geo_password';
+  END IF;
+
+  -- Création du rôle lecture seule
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'read_only') THEN
+    CREATE ROLE read_only WITH LOGIN PASSWORD 'readonly_password';
+  END IF;
+END
+$$;
+
 -- Schémas
 CREATE SCHEMA IF NOT EXISTS cadastre;
 CREATE SCHEMA IF NOT EXISTS domaine;
@@ -127,12 +142,40 @@ FROM domaine.biens b
 LEFT JOIN cadastre.parcelles p ON ST_Intersects(b.geom, p.geom);
 
 -- Permissions
-GRANT USAGE ON SCHEMA cadastre TO geo;
-GRANT USAGE ON SCHEMA domaine TO geo;
-GRANT USAGE ON SCHEMA traitement TO geo;
+-- Permissions standardisées
+-- Note: Les rôles sont créés au début du script
+
+-- Droits pour l'utilisateur applicatif (geo)
+GRANT ALL PRIVILEGES ON SCHEMA cadastre TO geo;
+GRANT ALL PRIVILEGES ON SCHEMA domaine TO geo;
+GRANT ALL PRIVILEGES ON SCHEMA traitement TO geo;
+
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA cadastre TO geo;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA domaine TO geo;
 GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA traitement TO geo;
+
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA cadastre TO geo;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA domaine TO geo;
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA traitement TO geo;
+
+-- Droits par défaut pour les futures tables
+ALTER DEFAULT PRIVILEGES IN SCHEMA cadastre GRANT ALL ON TABLES TO geo;
+ALTER DEFAULT PRIVILEGES IN SCHEMA domaine GRANT ALL ON TABLES TO geo;
+ALTER DEFAULT PRIVILEGES IN SCHEMA traitement GRANT ALL ON TABLES TO geo;
+
+-- Droits de lecture pour les auditeurs/reporting
+GRANT USAGE ON SCHEMA cadastre TO read_only;
+GRANT USAGE ON SCHEMA domaine TO read_only;
+GRANT SELECT ON ALL TABLES IN SCHEMA cadastre TO read_only;
+GRANT SELECT ON ALL TABLES IN SCHEMA domaine TO read_only;
+
+-- Documentation de la base de données
+COMMENT ON SCHEMA cadastre IS 'Schéma contenant les données cadastrales (parcelles, bâtiments, propriétaires)';
+COMMENT ON TABLE cadastre.parcelles IS 'Table vectorielle des parcelles cadastrales';
+COMMENT ON COLUMN cadastre.parcelles.id_parcelle IS 'Identifiant unique composite (commune + section + numéro)';
+COMMENT ON TABLE cadastre.batiments IS 'Table vectorielle du bâti';
+COMMENT ON SCHEMA domaine IS 'Schéma de gestion du domaine de l''État et des collectivités';
+COMMENT ON TABLE domaine.biens IS 'Inventaire des biens immobiliers gérés';
+COMMENT ON TABLE domaine.occupations IS 'Suivi des occupations et baux sur les biens domaniaux';
+COMMENT ON SCHEMA traitement IS 'Schéma technique pour le suivi des workflows et traitements IA';
+COMMENT ON TABLE traitement.logs IS 'Journal d''exécution des workflows n8n et scripts Python';

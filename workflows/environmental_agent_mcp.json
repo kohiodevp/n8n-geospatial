@@ -1,0 +1,90 @@
+{
+  "name": "EnvironmentalAgent (MCP) - Buffer/Surveillance",
+  "active": false,
+  "nodes": [
+    {"parameters": {}, "id": "manual", "name": "Déclencheur Manuel", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [220, 300]},
+    {
+      "parameters": {
+        "values": {"string": [
+          {"name": "action", "value": "buffer"},
+          {"name": "table", "value": "environment.sites"},
+          {"name": "distance_m", "value": "200"}
+        ]}
+      },
+      "id": "inputs",
+      "name": "Entrées",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-server:5001/invoke",
+        "method": "POST",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={{ JSON.stringify({ tool_name: 'environmental_agent', params: { action: $json.action, inputs: { table: $json.table, distance_m: Number($json.distance_m) }, options: {} } }) }}",
+        "options": {"timeout": 60000}
+      },
+      "id": "invoke",
+      "name": "Invoke EnvironmentalAgent (MCP)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {"conditions": {"string": [{"value1": "={{$json.status}}", "operation": "notEqual", "value2": "success"}]}},
+      "id": "ifStatus",
+      "name": "IF status",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [920, 300]
+    },
+    {
+      "parameters": {"values": {"string": [
+        {"name": "status", "value": "error"},
+        {"name": "message", "value": "={{$json.message || 'Échec buffer/surveillance'}}"}
+      ]}},
+      "id": "onError",
+      "name": "On Error",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1140, 240]
+    },
+    {
+      "parameters": {
+        "url": "={{$env.SLACK_WEBHOOK_URL || ''}}",
+        "method": "POST",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "={{ JSON.stringify({ text: '[n8n][Env] Erreur', details: $json }) }}"
+      },
+      "id": "notify",
+      "name": "Notify Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1360, 240]
+    },
+    {
+      "parameters": {"values": {"string": [
+        {"name": "status", "value": "success"},
+        {"name": "message", "value": "Opération terminée"},
+        {"name": "count", "value": "={{$json.metrics?.count || 0}}"}
+      ]}},
+      "id": "summary",
+      "name": "Résumé",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [1140, 360]
+    }
+  ],
+  "connections": {
+    "Déclencheur Manuel": {"main": [[{"node": "Entrées", "type": "main", "index": 0}]]},
+    "Entrées": {"main": [[{"node": "Invoke EnvironmentalAgent (MCP)", "type": "main", "index": 0}]]},
+    "Invoke EnvironmentalAgent (MCP)": {"main": [[{"node": "IF status", "type": "main", "index": 0}]]},
+    "IF status": {"main": [[{"node": "On Error", "type": "main", "index": 0}, {"node": "Résumé", "type": "main", "index": 0}]]},
+    "On Error": {"main": [[{"node": "Notify Error", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"instanceId": "default"}
+}

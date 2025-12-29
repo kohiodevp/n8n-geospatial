@@ -1,7 +1,25 @@
 #!/usr/bin/env python3
+import os
+import logging
+
+# Forcer mode headless si non défini (utile en conteneur)
+if not os.getenv('QT_QPA_PLATFORM'):
+    os.environ['QT_QPA_PLATFORM'] = 'offscreen'
+
+logger = logging.getLogger(__name__)
+
 """
 Wrapper pour utiliser QGIS Processing dans n8n
+- Détecte la disponibilité de QGIS
+- Force le mode headless par défaut (offscreen)
 """
+
+def is_qgis_available() -> bool:
+    try:
+        import qgis  # type: ignore  # noqa: F401
+        return True
+    except Exception:
+        return False
 import os
 import sys
 import json

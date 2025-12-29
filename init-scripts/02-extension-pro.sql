@@ -352,6 +352,35 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA domaine TO geo;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA traitement TO geo;
 
 -- ============================================================================
+-- PERMISSIONS SUPPLÉMENTAIRES
+-- ============================================================================
+
+-- Droit de lecture pour l'auditeur sur les nouvelles tables métier
+GRANT SELECT ON ALL TABLES IN SCHEMA domaine TO read_only;
+GRANT SELECT ON ALL TABLES IN SCHEMA traitement TO read_only;
+
+-- ============================================================================
+-- DOCUMENTATION (COMMENTAIRES)
+-- ============================================================================
+
+COMMENT ON TABLE domaine.evaluations IS 'Historique des estimations de valeur (vénale/locative) des biens';
+COMMENT ON COLUMN domaine.evaluations.donnees_dvf IS 'Cache des données DVF utilisées pour l''estimation (JSON)';
+
+COMMENT ON TABLE domaine.documents IS 'Gestion Électronique des Documents (GED) associée aux biens';
+COMMENT ON COLUMN domaine.documents.hash_sha256 IS 'Empreinte numérique pour vérifier l''intégrité du fichier';
+
+COMMENT ON TABLE domaine.references_dvf IS 'Base locale des mutations DVF pour références comparatives';
+
+COMMENT ON TABLE traitement.dossiers IS 'Workflow administratif : suivi des instructions et procédures';
+COMMENT ON TABLE traitement.alertes IS 'Centre de notifications multi-canaux (SMS, Email, Webhook)';
+COMMENT ON TABLE traitement.config_sms IS 'Configuration des fournisseurs de SMS (Twilio, etc.)';
+
+COMMENT ON VIEW domaine.v_biens_evaluations IS 'Vue consolidée : biens enrichis avec leur dernière estimation connue';
+COMMENT ON VIEW traitement.v_dossiers_urgents IS 'Vue opérationnelle : dossiers proches de la date limite ou en retard';
+
+COMMENT ON FUNCTION domaine.calculer_valeur_locative IS 'Fonction d''estimation automatique basée sur les transactions DVF environnantes';
+
+-- ============================================================================
 -- DONNÉES D'INITIALISATION
 -- ============================================================================
 

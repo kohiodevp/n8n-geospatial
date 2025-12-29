@@ -102,10 +102,40 @@ def find_overlapping_parcelles(bien_id):
     
     return results
 
+def get_stats_commune(code_commune):
+    """Obtenir des statistiques sur une commune"""
+    engine = get_engine()
+    
+    query = """
+        SELECT
+            COUNT(*) as nombre_parcelles,
+            SUM(contenance) as surface_totale_m2,
+            AVG(contenance) as surface_moyenne_m2,
+            MIN(contenance) as surface_minimale_m2,
+            MAX(contenance) as surface_maximale_m2
+        FROM cadastre.parcelles
+        WHERE code_commune = :commune
+    """
+    
+    with engine.connect() as conn:
+        result = conn.execute(text(query), {"commune": code_commune}).fetchone()
+        
+        if result and result[0] > 0:
+            return {
+                "code_commune": code_commune,
+                "nombre_parcelles": int(result[0]),
+                "surface_totale_ha": round(float(result[1]) / 10000, 2) if result[1] else 0,
+                "surface_moyenne_m2": round(float(result[2]), 2) if result[2] else 0,
+                "surface_minimale_m2": round(float(result[3]), 2) if result[3] else 0,
+                "surface_maximale_m2": round(float(result[4]), 2) if result[4] else 0
+            }
+        else:
+            return {"code_commune": code_commune, "message": "Aucune parcelle trouvée pour cette commune."}
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Analyses spatiales")
     parser.add_argument('--action', required=True, 
-                       choices=['buffer', 'surface', 'overlap'],
+                       choices=['buffer', 'surface', 'overlap', 'stats_commune'],
                        help="Type d'analyse")
     parser.add_argument('--params', type=str, default='{}',
                        help="Paramètres JSON")
@@ -117,7 +147,11 @@ if __name__ == '__main__':
         
         if args.action == 'buffer':
             if 'point' not in params:
-                raise ValueError("Paramètre 'point' requis (format WKT)")
+                if 'x' in params and 'y' in params:
+                    params['point'] = f"POINT({params['x']} {params['y']})"
+                else:
+                    raise ValueError("Paramètre 'point' (WKT) ou 'x'/'y' requis")
+            
             result = get_parcelles_in_buffer(
                 params['point'],
                 params.get('distance', 100),
@@ -131,6 +165,10 @@ if __name__ == '__main__':
             if 'bien_id' not in params:
                 raise ValueError("Paramètre 'bien_id' requis")
             result = find_overlapping_parcelles(params['bien_id'])
+        elif args.action == 'stats_commune':
+            if 'code_commune' not in params:
+                raise ValueError("Paramètre 'code_commune' requis")
+            result = get_stats_commune(params['code_commune'])
         
         print(json.dumps(result, ensure_ascii=False))
         

@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint (ruff)
+        run: |
+          ruff check scripts || true
+
+      - name: Quick Python compile check
+        run: |
+          python -m compileall -q scripts || true
+
+      - name: Verify repository docs exist
+        run: |
+          test -f README.md
+          test -f .env.example
+
+  smoke-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps for scripts
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Build and start docker compose
+        run: |
+          docker compose version
+          docker compose up -d --build
+
+      - name: Wait for MCP healthz
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5001/healthz >/dev/null; then echo "MCP ready"; exit 0; fi
+            sleep 2;
+          done
+          echo "MCP not ready"; docker ps; docker logs mcp-server || true; exit 1
+
+      - name: Wait for n8n healthz
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:5678/healthz >/dev/null; then echo "n8n ready"; exit 0; fi
+            sleep 2;
+          done
+          echo "n8n not ready"; docker ps; docker logs n8n-geospatial || true; exit 1
+
+      - name: Run health_check.py --json
+        run: |
+          python3 scripts/health_check.py --json --url http://localhost:5678/healthz
+
+      - name: Run verify_system.py --json
+        run: |
+          python3 scripts/verify_system.py --json
+
+      - name: Print service list and last logs
+        if: always()
+        run: |
+          docker ps
+          docker logs --tail=200 mcp-server || true
+          docker logs --tail=200 n8n-geospatial || true
+
+      - name: Stop services
+        if: always()
+        run: |
+          docker compose down -v

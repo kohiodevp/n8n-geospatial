@@ -1,0 +1,202 @@
+{
+  "name": "Planification Urbaine - Analyse de Développement",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "urban-planning-analysis",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_zone, zone_type, ST_AsGeoJSON(geom) as geometry, density_limit, current_density, area_ha FROM urbanisme.zones_planning WHERE ST_Intersects(geom, ST_Buffer(ST_GeomFromText('POINT({{ $json.longitude }} {{ $json.latitude }})', 4326), {{ $json.buffer_radius || 1000 }})) AND zone_type IN ({{ $json.allowed_zone_types || \"'residential','commercial','mixed_use'\" }});",
+        "options": {}
+      },
+      "id": "fetch-urban-zones",
+      "name": "Fetch Urban Zones",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les zones urbaines dans un rayon donné"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_infra, infra_type, capacity, ST_AsGeoJSON(geom) as geometry, ST_Distance(geom, ST_GeomFromText('POINT({{ $json.longitude }} {{ $json.latitude }})', 4326)) as distance FROM urbanisme.infrastructure WHERE ST_DWithin(geom, ST_GeomFromText('POINT({{ $json.longitude }} {{ $json.latitude }})', 4326), {{ $json.infra_radius || 2000 }}) ORDER BY distance ASC LIMIT {{ $json.max_infra || 10 }};",
+        "options": {}
+      },
+      "id": "fetch-infrastructure",
+      "name": "Fetch Infrastructure",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les infrastructures dans un rayon donné"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "analysis_id",
+              "value": "={{ $json.workflow_execution_id || new Date().getTime() }}"
+            },
+            {
+              "name": "analysis_date",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.latitude }},{{ $json.longitude }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-analysis-data",
+      "name": "Prepare Analysis Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /opt/geoscripts/urbanism_agent.py --action analyze-development-potential --location '{{ $json.latitude }},{{ $json.longitude }}' --zone-data '{{ JSON.stringify($input.all()[0].json) }}' --infra-data '{{ JSON.stringify($input.all()[1].json) }}'",
+        "options": {}
+      },
+      "id": "execute-urbanism-analysis",
+      "name": "Execute Urbanism Analysis",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "Exécute l'analyse d'urbanisme via l'agent dédié"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO urbanisme.analyses (analysis_id, location, zone_data, infra_data, results, analysis_date, status) VALUES ('{{ $json.analysis_id }}', 'SRID=4326;POINT({{ $json.longitude }} {{ $json.latitude }})', '{{ JSON.stringify($input.all()[0].json) }}', '{{ JSON.stringify($input.all()[1].json) }}', '{{ JSON.stringify($input.all()[2].json) }}', '{{ $json.analysis_date }}', 'completed') ON CONFLICT (analysis_id) DO UPDATE SET status = 'completed', completion_date = NOW();",
+        "options": {}
+      },
+      "id": "save-analysis-result",
+      "name": "Save Analysis Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        1360,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Enregistre le résultat de l'analyse dans la base de données"
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-urban-zones",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fetch-infrastructure",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "fetch-urban-zones": {
+      "main": [
+        [
+          {
+            "node": "prepare-analysis-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-infrastructure": {
+      "main": [
+        [
+          {
+            "node": "prepare-analysis-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-analysis-data": {
+      "main": [
+        [
+          {
+            "node": "execute-urbanism-analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute-urbanism-analysis": {
+      "main": [
+        [
+          {
+            "node": "save-analysis-result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

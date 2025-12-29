@@ -2,141 +2,178 @@
 
 ## Project Overview
 
-This is an n8n Geospatial Workflow Runner project that provides comprehensive geospatial processing capabilities for the n8n automation platform. It integrates QGIS, Python geospatial libraries, PostGIS, and GRASS GIS to enable sophisticated geospatial workflows in n8n.
+This is a sophisticated geospatial workflow automation system built on top of n8n, featuring AI-powered geospatial agents for cadastral, domain, urban planning, environmental, and transportation analysis. The project combines n8n's workflow automation capabilities with Python geospatial libraries (QGIS, GeoPandas, Shapely, Rasterio, etc.) to enable complex geospatial processing workflows.
 
-The project is designed to run as an external runner for n8n, with specialized Python scripts for comprehensive geospatial analysis, processing, and visualization using QGIS Processing, PostGIS, and GRASS GIS. It's configured for deployment to Render with an accompanying PostgreSQL database with PostGIS extension.
+### Key Features
+- **AI Geospatial Agents**: Cadastral, domain, urbanism, environmental, and transportation agents
+- **Advanced Spatial Analysis**: Geometric validation, anomaly detection, spatial clustering
+- **PostGIS Integration**: Spatial database for storage and analysis
+- **QGIS Processing**: Advanced spatial analysis tools
+- **Machine Learning**: Classification, prediction, and anomaly detection algorithms
+- **Automated Workflow Deployment**: All 22 geospatial workflows automatically loaded
+- **Complete Automation**: n8n workflows for complex processes
 
-## Architecture & Technologies
+### Architecture
+The system uses a Docker-based architecture with:
+- **n8n-geospatial**: Main service with geospatial libraries
+- **postgis**: PostgreSQL database with PostGIS extension
+- **redis**: Queue management for workflows
+- **nginx**: Reverse proxy (optional for production)
 
-- **Base Image**: QGIS official Docker image (qgis/qgis:latest) providing access to QGIS ecosystem
-- **n8n Runner**: Version 2.1.1 running in external mode for distributed processing
-- **Geospatial Libraries**:
-  - QGIS Processing for advanced vector and raster geospatial operations
-  - PostGIS for advanced spatial database operations and analysis
-  - Python libraries: GeoPandas, Shapely, Rasterio, Xarray, Rioxarray, PyProj, GeoAlchemy2, etc.
-  - GRASS GIS for advanced geoprocessing and terrain analysis
-  - Scikit-learn for spatial clustering and machine learning
-  - Matplotlib, Folium, Plotly for geospatial visualization
-- **File Storage**: Dedicated volumes for geospatial data processing and caching
+## Building and Running
+
+### Prerequisites
+- Docker and Docker Compose
+- Windows (batch scripts provided) or Linux/macOS
+- 4GB RAM minimum (8GB recommended for intensive processing)
+- 10GB disk space available
+
+### Quick Start
+```bash
+# On Windows
+.\scripts\start_n8n_geospatial.bat start
+
+# On Linux/macOS
+./scripts/start_n8n_geospatial.sh start
+```
+
+### Access the Interface
+- URL: http://localhost:5678
+- Username: admin
+- Password: cadastre2024
+
+### Development Mode
+```bash
+# Start in development mode
+.\scripts\dev_n8n_geospatial.bat dev-start
+
+# Reload workflows
+.\scripts\dev_n8n_geospatial.bat dev-reload
+
+# Access container shell
+.\scripts\dev_n8n_geospatial.bat dev-shell
+```
+
+### Testing
+```bash
+# Run geospatial agent tests
+.\scripts\test_geospatial_agents.bat run-all
+```
+
+## Development Conventions
+
+### Project Structure
+- `/scripts/` - Contains Python agent implementations and utility scripts
+- `/data/` - File storage for workflow data
+- `/geodata/` - Geospatial data files
+- `/workflows/` - n8n workflow definitions
+- `/init-scripts/` - Database initialization scripts
+- `/docs/` - Documentation files
+
+### Agent Structure
+Each geospatial agent follows a consistent pattern:
+- Python implementation with dataclasses and enums
+- Validation rules and spatial analysis capabilities
+- Integration with geospatial libraries (GeoPandas, Shapely, etc.)
+- Caching mechanisms for performance optimization
+
+### Environment Configuration
+The system uses a comprehensive `.env` file with:
+- Authentication and security settings
+- Database configuration (PostGIS)
+- Runner configuration for external processing
+- Geospatial-specific settings (GDAL, PROJ, QGIS)
+- Performance optimization parameters
+
+### Key Scripts
+- `start_n8n_geospatial.bat` - Basic system management
+- `dev_n8n_geospatial.bat` - Development features
+- `test_geospatial_agents.bat` - Agent testing
+- `optimize_project.bat` - Optimization tools
+- `system_check.bat` - System status verification
+
+## Technology Stack
+
+### Backend
+- **n8n**: Workflow automation platform
+- **QGIS**: Geospatial processing engine
+- **PostGIS**: Spatial database
+- **Redis**: Queue management
+
+### Python Libraries
+- **GeoPandas**: Geospatial data manipulation
+- **Shapely**: Geometric operations
+- **Rasterio**: Raster data processing
+- **PyProj**: Coordinate reference system transformations
+- **Scikit-learn**: Machine learning algorithms
+- **SciPy/Numpy**: Scientific computing
+
+### Infrastructure
+- **Docker**: Containerization
+- **Docker Compose**: Multi-container orchestration
+- **Nginx**: Reverse proxy (production)
 
 ## Key Components
 
-### Dockerfile
-- Builds from official QGIS image with full geospatial toolkit
-- Installs Node.js 20.x and n8n runner
-- Configures comprehensive geospatial Python library stack
-- Sets up working directories with appropriate permissions for geospatial operations
-- Includes custom geospatial scripts in `/opt/geoscripts`
+### Cadastral Agent
+- Geometric validation of parcels
+- Cadastral anomaly detection
+- Parcel consolidation
+- Property value prediction
+- Neighborhood analysis
 
-### Python Scripts in `/scripts`
-- `qgis_processing.py`: Comprehensive QGIS Processing wrapper for n8n workflows with advanced algorithms
-- `postgis_utils.py`: Advanced PostGIS database operations utilities with spatial analysis functions
-- `grass_utils.py`: GRASS GIS processing functions for terrain and advanced geoprocessing
-- `health_check.py`: Health check functionality for geospatial services
+### Domain Agent
+- Domain property management
+- Concession analysis
+- Strategic zone identification
+- Management optimization
 
-### Configuration Files
-- `render.yaml`: Render deployment configuration with PostgreSQL database and PostGIS extension
-- `.env.example`: Example environment variables for deployment
-- `requirements.txt`: Comprehensive geospatial Python dependencies with spatial analysis libraries
-- `startup.sh`: Container startup script with geospatial environment configuration
+### Urbanism Agent
+- Urban density analysis
+- Development opportunity identification
+- Infrastructure capacity assessment
+- Urban growth prediction
+- Accessibility analysis
+- Development scenario simulation
 
-## Comprehensive Geospatial Capabilities
+### Environmental Agent
+- Environmental quality assessment
+- Risk zone detection
+- Biodiversity hotspot analysis
+- Environmental trend prediction
+- Ecosystem services evaluation
+- Conservation priority identification
+- Pollution impact analysis
 
-### QGIS Processing Functions
-- **Vector Operations**: Buffer, clip, overlay (intersection, union, difference), dissolve, spatial join
-- **Raster Processing**: Clipping, hillshade, contours, reclassification, resampling
-- **Coordinate Reference Systems**: Reprojection, transformation, CRS management
-- **Spatial Analysis**: Distance calculations, proximity analysis, geometric operations
-- **Terrain Analysis**: DEM processing, watershed analysis, visibility analysis
-- **Algorithm Management**: List available algorithms, get algorithm help and parameters
-- **Advanced Processing**: Zonal statistics, interpolation, spatial clustering
+### Workflow Management System
+- Advanced orchestration capabilities
+- Workflow chaining and scheduling
+- Execution monitoring and statistics
+- Integration with n8n API
 
-### PostGIS Functions
-- **Database Connection**: Configurable connection management with connection pooling
-- **Spatial Queries**: Advanced spatial operators (ST_Intersects, ST_Distance, ST_Buffer, etc.)
-- **GeoDataFrame I/O**: Read/write between PostGIS and GeoPandas with optimization
-- **Spatial Indexing**: Automatic spatial index creation and management
-- **Nearest Neighbor Analysis**: K-nearest neighbor searches with distance calculations
-- **Aggregation Functions**: Spatial aggregation, area/length calculations, centroid computation
-- **Raster Support**: PostGIS raster operations and analysis
-- **Topological Operations**: Topological queries and validation
+## Security Considerations
+- Basic authentication enabled by default
+- Encryption key for sensitive data
+- Node.js function allow-list for security
+- Secure JWT secret for authentication
+- Disabled potentially dangerous features
 
-### GRASS GIS Functions
-- **Vector Processing**: Advanced vector operations beyond QGIS capabilities
-- **Terrain Analysis**: Slope, aspect, flow accumulation, watershed delineation
-- **Raster Analysis**: Advanced raster processing with GRASS capabilities
-- **Temporal Processing**: Space-time dataset management
+## Deployment
+The project includes deployment configurations for Render.com with:
+- Automated database provisioning
+- Environment variable management
+- Health check configuration
+- Resource allocation settings
 
-### Geospatial Python Libraries Integration
-- **GeoPandas/Geopandas**: Vector data manipulation and analysis
-- **Shapely**: Geometric operations and spatial predicates
-- **Rasterio/Xarray**: Raster data I/O and analysis
-- **PyProj**: Coordinate transformation and CRS operations
-- **GeoAlchemy2**: SQLAlchemy integration with PostGIS
-- **Scikit-learn**: Spatial clustering (DBSCAN, K-means) and spatial ML
-- **GeoPy**: Geocoding and reverse geocoding services
-- **Visualization**: Matplotlib, Folium, Plotly for geospatial visualization
+## Workflows
+The system includes 22 pre-built geospatial workflows:
+- AI Agent Cadastral
+- AI Agent Domanial
+- AI Agent Urbanism
+- Environmental Surveillance
+- Parcel Consolidation
+- Urban Planning Analysis
+- Property Value Prediction
+- And many more...
 
-## File System Structure for Geospatial Processing
-- `/files` - General file storage for inputs and outputs
-- `/geodata` - Geospatial data storage with read/write access for processing
-- `/qgis-output` - QGIS processing outputs with proper permissions
-- `/tmp/geodata-cache` - Temporary geospatial data cache for performance
-- `/opt/geoscripts` - Geospatial processing scripts accessible to n8n nodes
-- Permissions configured for concurrent geospatial processing operations
-
-## Environment Variables for Geospatial Operations
-
-### Required for Deployment
-- `N8N_ENCRYPTION_KEY`: Encryption key for n8n credentials
-- `N8N_USER_MANAGEMENT_JWT_SECRET`: JWT secret for authentication
-- `N8N_RUNNERS_MODE`: Set to "external" for runner mode
-
-### Database Variables (automatically configured on Render)
-- `DB_TYPE`, `DB_POSTGRESDB_HOST`, `DB_POSTGRESDB_PORT`
-- `DB_POSTGRESDB_USER`, `DB_POSTGRESDB_PASSWORD`, `DB_POSTGRESDB_DATABASE`
-
-### Geospatial Configuration
-- `GDAL_CACHEMAX`, `GDAL_NUM_THREADS`, `PROJ_NETWORK` for performance tuning
-- `QT_QPA_PLATFORM=offscreen` for headless QGIS operation
-- `XDG_RUNTIME_DIR` for Qt runtime in containerized environment
-- Performance settings optimized for geospatial processing workloads
-
-## Building and Running for Geospatial Workflows
-
-### Local Development
-```bash
-docker build -t n8n-geospatial .
-docker run -p 5678:5678 -v ./data:/geodata n8n-geospatial
-```
-
-### Render Deployment
-- Automatically deployed using `render.yaml` configuration with PostGIS database
-- Includes PostgreSQL database setup with PostGIS extension
-- Uses Dockerfile for container build with full geospatial stack
-- Configures environment variables and health checks for geospatial services
-
-## Development Conventions for Geospatial Workflows
-
-1. **Geospatial Processing**: Python scripts in `/scripts` designed for n8n integration with error handling
-2. **QGIS Headless Mode**: All QGIS operations configured for headless execution with proper initialization
-3. **Python Environment**: Uses Python 3 with comprehensive geospatial library stack and spatial analysis tools
-4. **Security**: Environment variables required for encryption and authentication
-5. **File Permissions**: All geospatial data directories configured with write permissions for processing
-6. **Error Handling**: Proper exception handling for geospatial operations with meaningful error messages
-7. **Performance**: Optimized for geospatial processing with appropriate caching and resource allocation
-8. **CRS Management**: Proper handling of coordinate reference systems and reprojections
-
-## Testing and Health Checks
-
-- Health checks available at `/healthz` endpoint for monitoring
-- Python-based health check script in `scripts/health_check.py`
-- Verifies n8n service and geospatial processing capabilities are responding correctly
-
-## Deployment Notes for Geospatial Applications
-
-- Designed for Render deployment with automatic PostgreSQL database provisioning with PostGIS extension
-- Single-click deployment using `render.yaml` configuration with geospatial-optimized settings
-- Environment variables configured for different deployment environments with geospatial optimizations
-- Automatic scaling considering geospatial processing resource requirements
-- Database management includes PostGIS extension and spatial index management
+All workflows are automatically loaded by n8n from the `/home/node/.n8n/workflows/` directory.

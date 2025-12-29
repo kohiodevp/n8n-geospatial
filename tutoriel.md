@@ -32,8 +32,13 @@ Avant de commencer, assurez-vous que votre environnement n8n Geospatial est corr
 ls -la /opt/geoscripts/
 # Vous devriez voir :
 # cadastral_agent.py
-# domain_agent.py  
-# other_agents.py
+# domain_agent.py
+# urbanism_agent.py
+# environmental_agent.py
+# workflow_manager.py
+# main_runner.py
+# example_agents.py
+# integrated_demo.py
 # ia_workflows_user_guide.py
 # qgis_processing.py
 # postgis_utils.py
@@ -68,13 +73,40 @@ Chaque agent dispose de fonctions spécifiques :
 - `validate_parcels()` - Valider la géométrie et les propriétés
 - `detect_cadastral_anomalies()` - Détecter anomalies cadastrales
 - `consolidate_parcels()` - Consolider les parcelles adjacentes
+- `predict_parcel_values()` - Prédire les valeurs foncières
 - `generate_cadastral_report()` - Générer un rapport complet
 
 ### Agent Domanial (`domain_agent.py`)
 - `load_domain_properties()` - Charger les propriétés domaniales
 - `identify_strategic_zones()` - Identifier zones stratégiques
 - `analyze_concessions()` - Analyser les concessions
+- `suggest_concession_optimization()` - Optimisation des concessions
 - `generate_domain_report()` - Générer un rapport domanial
+
+### Agent d'Urbanisme (`urbanism_agent.py`)
+- `load_planning_zones()` - Charger les zones d'urbanisme
+- `analyze_urban_density()` - Analyser la densité urbaine
+- `identify_development_opportunities()` - Identifier opportunités
+- `assess_infrastructure_capacity()` - Évaluer capacité infra
+- `predict_urban_growth()` - Prédire croissance urbaine
+- `generate_urbanism_report()` - Générer rapport urbanisme
+
+### Agent Environnemental (`environmental_agent.py`)
+- `load_environmental_data()` - Charger données environnementales
+- `assess_environmental_quality()` - Évaluer qualité environnementale
+- `detect_environmental_risks()` - Détecter risques environnementaux
+- `analyze_biodiversity_hotspots()` - Analyser hotspots biodiversité
+- `predict_environmental_trends()` - Prédire tendances environnementales
+- `identify_conservation_priorities()` - Identifier priorités conservation
+- `generate_environmental_report()` - Générer rapport environnemental
+
+### Gestionnaire de Workflows (`workflow_manager.py`)
+- `create_workflow_instance()` - Créer une instance de workflow
+- `start_workflow()` - Démarrer un workflow
+- `get_workflow_status()` - Obtenir statut workflow
+- `execute_workflow_sync()` - Exécuter workflow synchronement
+- `schedule_workflow()` - Planifier un workflow
+- `get_workflow_statistics()` - Obtenir statistiques workflows
 
 ## 4. Tutoriel Pratique - Agent Cadastral {#tutoriel-cadastral}
 
@@ -160,10 +192,10 @@ const features = inputData.features;
 const validationResults = features.map(feature => {
   const area = feature.properties.area;
   const geom = feature.geometry;
-  
+
   // Simulation de diverses validations
   const issues = [];
-  
+
   if (area < 100) {
     issues.push({
       type: "area_too_small",
@@ -171,7 +203,7 @@ const validationResults = features.map(feature => {
       severity: "low"
     });
   }
-  
+
   if (!geom || geom.type !== "Polygon") {
     issues.push({
       type: "geometry_invalid",
@@ -179,7 +211,7 @@ const validationResults = features.map(feature => {
       severity: "high"
     });
   }
-  
+
   return {
     parcel_id: feature.properties.id,
     issues: issues,
@@ -363,18 +395,18 @@ const analysis = {
 
 features.forEach(feature => {
   const props = feature.properties;
-  
+
   // Compter par catégorie
   if (!analysis.properties_by_category[props.category]) {
     analysis.properties_by_category[props.category] = 0;
   }
   analysis.properties_by_category[props.category]++;
-  
+
   // Compter les propriétés disponibles
   if (props.status === 'available') {
     analysis.available_properties++;
   }
-  
+
   // Identifier les propriétés stratégiques (simulation)
   if (props.category === 'coastal' || props.category === 'urban_perimeter') {
     analysis.strategic_properties++;
@@ -444,7 +476,7 @@ const urbanData = {
       population: 1800
     },
     {
-      id: "ZONE002", 
+      id: "ZONE002",
       zone_type: "commercial",
       density_limit: 500,
       current_density: 300,
@@ -453,7 +485,7 @@ const urbanData = {
     },
     {
       id: "ZONE003",
-      zone_type: "industrial", 
+      zone_type: "industrial",
       density_limit: 100,
       current_density: 80,
       area_ha: 15,
@@ -468,7 +500,7 @@ const urbanData = {
       current_flow: 1800
     },
     {
-      id: "TRANSIT001", 
+      id: "TRANSIT001",
       type: "metro_line",
       capacity: 15000,
       current_flow: 12000
@@ -499,28 +531,72 @@ const totalPopulation = zones.reduce((sum, zone) => sum + zone.population, 0);
 const totalArea = zones.reduce((sum, zone) => sum + zone.area_ha, 0);
 densityAnalysis.overall_urban_density = totalPopulation / totalArea;
 
-// Analyse par type de zone
+// Analyse par zone
 zones.forEach(zone => {
-  const zoneDensity = zone.current_density;
-  const utilizationRate = zone.current_density / zone.density_limit;
+  const densityRatio = zone.current_density / zone.density_limit;
   
   densityAnalysis.density_by_zone[zone.id] = {
     type: zone.zone_type,
-    current_density: zoneDensity,
-    utilization_rate: utilizationRate,
+    current_density: zone.current_density,
+    density_limit: zone.density_limit,
+    utilization_rate: densityRatio,
     population: zone.population,
-    area: zone.area_ha
+    area_ha: zone.area_ha
   };
-  
-  // Identifier zones surpeuplées ou sous-utilisées
-  if (utilizationRate > 0.9) {
+
+  // Identifier les zones surpeuplées ou sous-utilisées
+  if (densityRatio > 0.9) {
     densityAnalysis.overcrowded_zones.push(zone.id);
-  } else if (utilizationRate < 0.5 && zone.zone_type !== 'industrial') {
+  } else if (densityRatio < 0.3 && zone.zone_type !== 'industrial') {
     densityAnalysis.underutilized_zones.push(zone.id);
   }
 });
 
 return [{json: densityAnalysis}];
+```
+
+**Noeud 4 : Identification des Opportunités de Développement**
+
+```javascript
+const densityAnalysis = $input.first.json;
+
+// Identifier les opportunités de développement
+const developmentOpportunities = [];
+
+// Analyse de la proximité aux infrastructures
+const infrastructure = $input.all()[0].json.infrastructure;
+
+densityAnalysis.overcrowded_zones.forEach(zoneId => {
+  developmentOpportunities.push({
+    type: "relief_opportunity",
+    zone_id: zoneId,
+    reason: "zone_overcrowded",
+    recommended_action: "develop_adjacent_areas",
+    priority: "high"
+  });
+});
+
+densityAnalysis.underutilized_zones.forEach(zoneId => {
+  developmentOpportunities.push({
+    type: "development_opportunity",
+    zone_id: zoneId,
+    reason: "zone_underutilized",
+    recommended_action: "increase_density",
+    priority: "medium"
+  });
+});
+
+const opportunities = {
+  density_analysis: densityAnalysis,
+  development_opportunities: developmentOpportunities,
+  recommendations: [
+    "Développer les zones sous-utilisées",
+    "Créer des corridors de développement",
+    "Renforcer les infrastructures dans les zones à forte densité"
+  ]
+};
+
+return [{json: opportunities}];
 ```
 
 ## 7. Tutoriel Pratique - Agent Environnemental {#tutoriel-environnemental}
@@ -544,7 +620,7 @@ const environmentalData = {
     },
     {
       id: "STATION002",
-      coordinates: [2.3500, 48.8500], 
+      coordinates: [2.3500, 48.8500],
       air_quality: 0.4,
       water_quality: 0.5,
       soil_quality: 0.3,
@@ -563,7 +639,7 @@ const environmentalData = {
       id: "RISK002",
       type: "pollution",
       probability: 0.7,
-      impact_level: "medium", 
+      impact_level: "medium",
       area_ha: 25
     }
   ],
@@ -580,7 +656,7 @@ const environmentalData = {
 return [{json: environmentalData}];
 ```
 
-**Noeud 3 : Analyse de Qualité Environnementale**
+**Noeud 3 : Évaluation de la Qualité Environnementale**
 
 ```javascript
 const inputData = $input.first.json;
@@ -594,20 +670,20 @@ const qualityAssessment = {
 };
 
 // Calculer l'index global
-const avgScore = inputData.monitoring_stations.reduce((sum, station) => 
+const avgScore = inputData.monitoring_stations.reduce((sum, station) =>
   sum + station.overall_score, 0) / inputData.monitoring_stations.length;
 qualityAssessment.overall_quality_index = avgScore;
 
 // Analyse par paramètre
-const airQuality = inputData.monitoring_stations.reduce((sum, station) => 
+const airQuality = inputData.monitoring_stations.reduce((sum, station) =>
   sum + station.air_quality, 0) / inputData.monitoring_stations.length;
-const waterQuality = inputData.monitoring_stations.reduce((sum, station) => 
+const waterQuality = inputData.monitoring_stations.reduce((sum, station) =>
   sum + station.water_quality, 0) / inputData.monitoring_stations.length;
 
 qualityAssessment.quality_by_parameter = {
   air_quality: airQuality,
   water_quality: waterQuality,
-  soil_quality: inputData.monitoring_stations.reduce((sum, station) => 
+  soil_quality: inputData.monitoring_stations.reduce((sum, station) =>
     sum + station.soil_quality, 0) / inputData.monitoring_stations.length
 };
 
@@ -700,7 +776,7 @@ return $input.all(); // Passer les données inchangées
 // Workflow complet de suivi des concessions
 const workflow = {
   trigger: "cron_30_days", // Exécution tous les 30 jours
-  
+
   nodes: [
     {
       name: "Load Concessions",
@@ -713,10 +789,10 @@ const workflow = {
     },
     {
       name: "Check Expirations",
-      type: "function", 
+      type: "function",
       code: `
         const concessions = $input.first.json;
-        const soonToExpire = concessions.filter(c => 
+        const soonToExpire = concessions.filter(c =>
           new Date(c.endDate) < new Date(Date.now() + 90*24*60*60*1000) // 90 jours
         );
         return [{json: soonToExpire}];
@@ -756,7 +832,7 @@ const workflow = {
       }
     },
     {
-      "name": "Store Results", 
+      "name": "Store Results",
       "type": "n8n-nodes-base.httpRequest",
       "parameters": {
         "url": "http://your-db-api/cadastral-results",
@@ -780,7 +856,7 @@ const integratedPlanningWorkflow = {
       // Analyse cadastrale
     },
     {
-      // Analyse domaniale  
+      // Analyse domaniale
     },
     {
       // Analyse urbaine

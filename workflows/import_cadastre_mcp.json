@@ -1,0 +1,66 @@
+{
+  "name": "Import Cadastre Commune (MCP)",
+  "active": false,
+  "nodes": [
+    {"parameters": {}, "id": "manual", "name": "Déclencheur Manuel", "type": "n8n-nodes-base.manualTrigger", "typeVersion": 1, "position": [220, 300]},
+
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "// Définir la commune\nreturn [{ json: { code: '75056', nom: 'Paris' } }];"}, "id": "setCommune", "name": "Configurer Commune", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [460, 300]},
+
+    {"parameters": {"method": "GET", "url": "={{ 'https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/' + $json.code + '/geojson/parcelles' }}", "options": {"timeout": 120000}}, "id": "downloadParcelles", "name": "Télécharger Parcelles", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [700, 180]},
+    {"parameters": {"method": "GET", "url": "={{ 'https://cadastre.data.gouv.fr/bundler/cadastre-etalab/communes/' + $json.code + '/geojson/batiments' }}", "options": {"timeout": 120000}}, "id": "downloadBatiments", "name": "Télécharger Bâtiments", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [700, 420]},
+
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "const code = $items().find(i => i.node && i.node.name === 'Configurer Commune')?.json?.code; if (!code) { return [{ json: { status: 'error', message: 'Code commune manquant' } }]; } const fs = require('fs'); const path = require('path'); const baseDir = '/files/cadastre/' + code; try { fs.mkdirSync(baseDir, { recursive: true }); } catch(e) {} const inputAll = $input.all(); for (const it of inputAll) { const fromNode = it.node && it.node.name || ''; if (fromNode.includes('Télécharger Parcelles')) { fs.writeFileSync(path.join(baseDir, 'parcelles.geojson'), JSON.stringify(it.json)); } else if (fromNode.includes('Télécharger Bâtiments')) { fs.writeFileSync(path.join(baseDir, 'batiments.geojson'), JSON.stringify(it.json)); } } return [{ json: { code, dir: baseDir } }];"}, "id": "writeFiles", "name": "Écrire les fichiers", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [940, 300]},
+
+    {"parameters": {"url": "http://mcp-server:5001/invoke", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ tool_name: 'cadastral_agent', params: { action: 'import', inputs: { file: '/files/cadastre/' + $json.code + '/parcelles.geojson', table: 'cadastre.parcelles', srid: 2154 }, options: { if_exists: 'append', chunksize: 5000 } } }) }}", "options": {"timeout": 60000}}, "id": "invokeImportParcelles", "name": "Invoke Import Parcelles (MCP)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1180, 180]},
+    {"parameters": {"url": "http://mcp-server:5001/invoke", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ tool_name: 'cadastral_agent', params: { action: 'import', inputs: { file: '/files/cadastre/' + $json.code + '/batiments.geojson', table: 'cadastre.batiments', srid: 2154 }, options: { if_exists: 'append', chunksize: 5000 } } }) }}", "options": {"timeout": 60000}}, "id": "invokeImportBatiments", "name": "Invoke Import Bâtiments (MCP)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1180, 420]},
+
+    {"parameters": {"conditions": {"string": [{"value1": "={{$json.status}}", "operation": "notEqual", "value2": "success"}]}}, "id": "ifParcelles", "name": "IF Parcelles status", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [1400, 180]},
+    {"parameters": {"conditions": {"string": [{"value1": "={{$json.status}}", "operation": "notEqual", "value2": "success"}]}}, "id": "ifBatiments", "name": "IF Batiments status", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [1400, 420]},
+
+    {"parameters": {"values": {"string": [{"name": "status", "value": "error"}, {"name": "message", "value": "={{$json.message || 'Échec import parcelles'}}"}, {"name": "resource", "value": "parcelles"}, {"name": "code_commune", "value": "={{$items(\"Configurer Commune\").first().json.code}}"}]}}, "id": "errorParcelles", "name": "Erreur Parcelles", "type": "n8n-nodes-base.set", "typeVersion": 3, "position": [1600, 120]},
+    {"parameters": {"url": "={{$env.SLACK_WEBHOOK_URL || ''}}", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ text: '[n8n][Cadastre] Import Parcelles KO', details: $json }) }}"}, "id": "notifyParcelles", "name": "Notify Error Parcelles", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1820, 120]},
+
+    {"parameters": {"values": {"string": [{"name": "status", "value": "error"}, {"name": "message", "value": "={{$json.message || 'Échec import bâtiments'}}"}, {"name": "resource", "value": "batiments"}, {"name": "code_commune", "value": "={{$items(\"Configurer Commune\").first().json.code}}"}]}}, "id": "errorBatiments", "name": "Erreur Bâtiments", "type": "n8n-nodes-base.set", "typeVersion": 3, "position": [1600, 360]},
+    {"parameters": {"url": "={{$env.SLACK_WEBHOOK_URL || ''}}", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ text: '[n8n][Cadastre] Import Bâtiments KO', details: $json }) }}"}, "id": "notifyBatiments", "name": "Notify Error Bâtiments", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1820, 360]},
+
+    {"parameters": {"operation": "executeQuery", "query": "SELECT COUNT(*)::int AS total_parcelles, SUM(contenance)::double precision AS surface_totale, COUNT(DISTINCT section)::int AS nb_sections FROM cadastre.parcelles WHERE code_commune = '={{$items(\"Configurer Commune\").first().json.code}}';"}, "id": "statsImport", "name": "Statistiques Import", "type": "n8n-nodes-base.postgres", "typeVersion": 2, "position": [1600, 520]},
+
+    {"parameters": {"url": "http://mcp-server:5001/invoke", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ tool_name: 'cadastral_agent', params: { action: 'validate', inputs: { table: 'cadastre.parcelles' }, options: { fix_invalid: false } } }) }}", "options": {"timeout": 60000}}, "id": "invokeValidate", "name": "Invoke Validate (MCP)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [1820, 520]},
+    {"parameters": {"conditions": {"string": [{"value1": "={{$json.status}}", "operation": "notEqual", "value2": "success"}]}}, "id": "ifValidate", "name": "IF Validate status", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [2040, 520]},
+    {"parameters": {"values": {"string": [{"name": "status", "value": "error"}, {"name": "message", "value": "={{$json.message || 'Échec validation'}}"}, {"name": "stage", "value": "validate"}]}}, "id": "errorValidate", "name": "Erreur Validate", "type": "n8n-nodes-base.set", "typeVersion": 3, "position": [2260, 480]},
+    {"parameters": {"url": "={{$env.SLACK_WEBHOOK_URL || ''}}", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ text: '[n8n][Cadastre] Validation KO', details: $json }) }}"}, "id": "notifyValidate", "name": "Notify Error Validate", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [2480, 480]},
+
+    {"parameters": {"url": "http://mcp-server:5001/invoke", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ tool_name: 'cadastral_agent', params: { action: 'analyze', inputs: { table: 'cadastre.parcelles' }, options: { summary: true } } }) }}", "options": {"timeout": 60000}}, "id": "invokeAnalyze", "name": "Invoke Analyze (MCP)", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [2260, 560]},
+    {"parameters": {"conditions": {"string": [{"value1": "={{$json.status}}", "operation": "notEqual", "value2": "success"}]}}, "id": "ifAnalyze", "name": "IF Analyze status", "type": "n8n-nodes-base.if", "typeVersion": 1, "position": [2480, 560]},
+    {"parameters": {"values": {"string": [{"name": "status", "value": "error"}, {"name": "message", "value": "={{$json.message || 'Échec analyse'}}"}, {"name": "stage", "value": "analyze"}]}}, "id": "errorAnalyze", "name": "Erreur Analyze", "type": "n8n-nodes-base.set", "typeVersion": 3, "position": [2700, 520]},
+    {"parameters": {"url": "={{$env.SLACK_WEBHOOK_URL || ''}}", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "={{ JSON.stringify({ text: '[n8n][Cadastre] Analyse KO', details: $json }) }}"}, "id": "notifyAnalyze", "name": "Notify Error Analyze", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4, "position": [2920, 520]},
+
+    {"parameters": {"values": {"string": [
+      {"name": "status", "value": "success"},
+      {"name": "message", "value": "Import + Validation + Analyse terminés"},
+      {"name": "code_commune", "value": "={{$items(\"Configurer Commune\").first().json.code}}"}
+    ]}}, "id": "globalSummary", "name": "Global Summary", "type": "n8n-nodes-base.set", "typeVersion": 3, "position": [2920, 640]}
+  ],
+  "connections": {
+    "Déclencheur Manuel": {"main": [[{"node": "Configurer Commune", "type": "main", "index": 0}]]},
+    "Configurer Commune": {"main": [[{"node": "Télécharger Parcelles", "type": "main", "index": 0}, {"node": "Télécharger Bâtiments", "type": "main", "index": 0}]]},
+    "Télécharger Parcelles": {"main": [[{"node": "Écrire les fichiers", "type": "main", "index": 0}]]},
+    "Télécharger Bâtiments": {"main": [[{"node": "Écrire les fichiers", "type": "main", "index": 0}]]},
+    "Écrire les fichiers": {"main": [[{"node": "Invoke Import Parcelles (MCP)", "type": "main", "index": 0}, {"node": "Invoke Import Bâtiments (MCP)", "type": "main", "index": 0}]]},
+    "Invoke Import Parcelles (MCP)": {"main": [[{"node": "IF Parcelles status", "type": "main", "index": 0}]]},
+    "Invoke Import Bâtiments (MCP)": {"main": [[{"node": "IF Batiments status", "type": "main", "index": 0}]]},
+    "IF Parcelles status": {"main": [[{"node": "Erreur Parcelles", "type": "main", "index": 0}, {"node": "Statistiques Import", "type": "main", "index": 0}]]},
+    "Erreur Parcelles": {"main": [[{"node": "Notify Error Parcelles", "type": "main", "index": 0}]]},
+    "IF Batiments status": {"main": [[{"node": "Erreur Bâtiments", "type": "main", "index": 0}, {"node": "Statistiques Import", "type": "main", "index": 0}]]},
+    "Erreur Bâtiments": {"main": [[{"node": "Notify Error Bâtiments", "type": "main", "index": 0}]]},
+    "Statistiques Import": {"main": [[{"node": "Invoke Validate (MCP)", "type": "main", "index": 0}]]},
+    "Invoke Validate (MCP)": {"main": [[{"node": "IF Validate status", "type": "main", "index": 0}]]},
+    "IF Validate status": {"main": [[{"node": "Erreur Validate", "type": "main", "index": 0}, {"node": "Invoke Analyze (MCP)", "type": "main", "index": 0}]]},
+    "Erreur Validate": {"main": [[{"node": "Notify Error Validate", "type": "main", "index": 0}]]},
+    "Invoke Analyze (MCP)": {"main": [[{"node": "IF Analyze status", "type": "main", "index": 0}]]},
+    "IF Analyze status": {"main": [[{"node": "Erreur Analyze", "type": "main", "index": 0}, {"node": "Global Summary", "type": "main", "index": 0}]]},
+    "Erreur Analyze": {"main": [[{"node": "Notify Error Analyze", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "meta": {"instanceId": "default"}
+}

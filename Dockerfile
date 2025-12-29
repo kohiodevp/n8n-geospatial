@@ -65,7 +65,7 @@ RUN mkdir -p /opt/geoscripts /opt/init-scripts /tmp/runtime-node && chmod 777 /t
 COPY scripts /opt/geoscripts/
 COPY init-scripts /opt/init-scripts/
 
-RUN chmod +x /opt/geoscripts/*.py
+RUN chmod +x /opt/geoscripts/*
 ENV PYTHONPATH="/opt/geoscripts:${PYTHONPATH}"
 
 # ============================================
@@ -78,7 +78,7 @@ RUN mkdir -p /files /geodata /qgis-output /tmp/geodata-cache && \
 # Script de démarrage
 # ============================================
 COPY startup.sh /startup.sh
-RUN chmod +x /startup.sh
+RUN sed -i 's/\r$//' /startup.sh && chmod +x /startup.sh
 
 EXPOSE 5678
 

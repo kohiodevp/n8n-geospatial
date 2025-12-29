@@ -1,0 +1,166 @@
+{
+  "name": "Consolidation des Parcelles Cadastrales",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "consolidate-parcels",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_parcelle, code_commune, section, numero, contenance, ST_AsGeoJSON(geom) as geometry FROM cadastre.parcelles WHERE owner_id = '{{ $json.owner_id }}' AND commune = '{{ $json.commune }}' AND ST_Distance(geom, (SELECT geom FROM cadastre.parcelles WHERE id_parcelle = '{{ $json.reference_parcel_id }}' LIMIT 1)) < {{ $json.max_distance || 50 }} ORDER BY ST_Distance(geom, (SELECT geom FROM cadastre.parcelles WHERE id_parcelle = '{{ $json.reference_parcel_id }}' LIMIT 1)) LIMIT {{ $json.max_parcels || 10 }};",
+        "options": {}
+      },
+      "id": "fetch-nearby-parcels",
+      "name": "Fetch Nearby Parcels",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les parcelles adjacentes ou proches pour la consolidation"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "consolidation_id",
+              "value": "={{ $json.workflow_execution_id || new Date().getTime() }}"
+            },
+            {
+              "name": "status",
+              "value": "processing"
+            },
+            {
+              "name": "total_parcels",
+              "value": "={{ $input.all()[0].json.length }}"
+            },
+            {
+              "name": "consolidation_date",
+              "value": "={{ new Date().toISOString() }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-consolidation-data",
+      "name": "Prepare Consolidation Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /opt/geoscripts/cadastral_agent.py --action consolidate --data '{{ JSON.stringify($input.all()[0].json) }}' --criteria '{{ JSON.stringify($json.consolidation_criteria || {}) }}'",
+        "options": {}
+      },
+      "id": "execute-consolidation",
+      "name": "Execute Consolidation",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "Exécute la consolidation via l'agent cadastral"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO cadastre.consolidations (consolidation_id, original_parcels, consolidated_geometry, area, creation_date, status) VALUES ('{{ $json.consolidation_id }}', '{{ JSON.stringify($json.original_parcels) }}', ST_GeomFromGeoJSON('{{ $json.consolidated_geometry }}'), {{ $json.consolidated_area }}, '{{ $json.consolidation_date }}', 'completed') ON CONFLICT (consolidation_id) DO UPDATE SET status = 'completed', completion_date = NOW();",
+        "options": {}
+      },
+      "id": "save-consolidation-result",
+      "name": "Save Consolidation Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        1360,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Enregistre le résultat de la consolidation dans la base de données"
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-nearby-parcels",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-nearby-parcels": {
+      "main": [
+        [
+          {
+            "node": "prepare-consolidation-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-consolidation-data": {
+      "main": [
+        [
+          {
+            "node": "execute-consolidation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute-consolidation": {
+      "main": [
+        [
+          {
+            "node": "save-consolidation-result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

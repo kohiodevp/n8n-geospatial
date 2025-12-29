@@ -1,0 +1,206 @@
+{
+  "name": "Gestion des Dossiers Domaniaux",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "domain-management",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_propriete, categorie, statut, ST_AsGeoJSON(geom) as geometry, superficie_ha, valeur, entite_gestion FROM domaine.proprietes WHERE ST_Intersects(geom, ST_Buffer(ST_GeomFromText('POINT({{ $json.longitude }} {{ $json.latitude }})', 4326), {{ $json.buffer_radius || 1000 }})) AND statut IN ({{ $json.status_filter || \"'available','leased','reserved'\" }}) ORDER BY valeur DESC LIMIT {{ $json.max_results || 50 }};",
+        "options": {}
+      },
+      "id": "fetch-domain-properties",
+      "name": "Fetch Domain Properties",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les propriétés domaniales dans un rayon donné"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id_concession, propriete_id, type, statut, date_debut, date_fin, montant_annuel, superficie_ha FROM domaine.concessions WHERE propriete_id IN (SELECT id_propriete FROM domaine.proprietes WHERE ST_Intersects(geom, ST_Buffer(ST_GeomFromText('POINT({{ $json.longitude }} {{ $json.latitude }})', 4326), {{ $json.buffer_radius || 1000 }}))) AND statut IN ({{ $json.concession_status || \"'active','expiring_soon','expired'\" }}) ORDER BY date_fin ASC;",
+        "options": {}
+      },
+      "id": "fetch-concessions",
+      "name": "Fetch Concessions",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        520,
+        500
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Récupère les concessions associées aux propriétés"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "dossier_id",
+              "value": "={{ $json.workflow_execution_id || new Date().getTime() }}"
+            },
+            {
+              "name": "dossier_date",
+              "value": "={{ new Date().toISOString() }}"
+            },
+            {
+              "name": "location",
+              "value": "={{ $json.latitude }},{{ $json.longitude }}"
+            },
+            {
+              "name": "action_type",
+              "value": "={{ $json.action_type || 'analysis' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "prepare-dossier-data",
+      "name": "Prepare Dossier Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "command": "python3 /opt/geoscripts/domain_agent.py --action {{ $json.action_type || 'analyze' }} --properties-data '{{ JSON.stringify($input.all()[0].json) }}' --concessions-data '{{ JSON.stringify($input.all()[1].json) }}' --location '{{ $json.latitude }},{{ $json.longitude }}'",
+        "options": {}
+      },
+      "id": "execute-domain-analysis",
+      "name": "Execute Domain Analysis",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        300
+      ],
+      "notes": "Exécute l'analyse domaniale via l'agent dédié"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO domaine.dossiers (dossier_id, location, properties_data, concessions_data, analysis_results, creation_date, status) VALUES ('{{ $json.dossier_id }}', 'SRID=4326;POINT({{ $json.longitude }} {{ $json.latitude }})', '{{ JSON.stringify($input.all()[0].json) }}', '{{ JSON.stringify($input.all()[1].json) }}', '{{ JSON.stringify($input.all()[2].json) }}', '{{ $json.dossier_date }}', 'completed') ON CONFLICT (dossier_id) DO UPDATE SET status = 'completed', completion_date = NOW();",
+        "options": {}
+      },
+      "id": "save-dossier-result",
+      "name": "Save Dossier Result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [
+        1360,
+        300
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Enregistre le résultat du dossier dans la base de données"
+    }
+  ],
+  "connections": {
+    "webhook-trigger": {
+      "main": [
+        [
+          {
+            "node": "fetch-domain-properties",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "fetch-concessions",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "fetch-domain-properties": {
+      "main": [
+        [
+          {
+            "node": "prepare-dossier-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "fetch-concessions": {
+      "main": [
+        [
+          {
+            "node": "prepare-dossier-data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare-dossier-data": {
+      "main": [
+        [
+          {
+            "node": "execute-domain-analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "execute-domain-analysis": {
+      "main": [
+        [
+          {
+            "node": "save-dossier-result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "default"
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

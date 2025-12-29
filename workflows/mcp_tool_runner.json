@@ -1,0 +1,61 @@
+{
+  "name": "MCP Tool Runner (Example)",
+  "nodes": [
+    {
+      "parameters": {},
+      "name": "Start",
+      "type": "n8n-nodes-base.start",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://mcp-server:5001/invoke",
+        "method": "POST",
+        "jsonParameters": true,
+        "sendBody": true,
+        "bodyParametersJson": "{\"tool_name\":\"ping\",\"params\":{\"source\":\"n8n\"}}",
+        "options": {}
+      },
+      "name": "Invoke MCP ping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "notes": "Résultat de l'invocation de l'outil MCP.\n\nInput: {{$json}}"
+      },
+      "name": "MCP Result",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [750, 300]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Invoke MCP ping",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke MCP ping": {
+      "main": [
+        [
+          {
+            "node": "MCP Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "active": false
+}
