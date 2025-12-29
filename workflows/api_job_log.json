@@ -1,0 +1,22 @@
+{
+  "name": "API Job Log (API_KEY)",
+  "active": true,
+  "nodes": [
+    {"parameters": {"httpMethod": "GET", "path": "api/jobs/:id/log", "responseMode": "responseNode", "options": {}}, "name": "Webhook - Job Log", "type": "n8n-nodes-base.webhook", "typeVersion": 1, "position": [200, 300]},
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "const hdr = ($json.headers||{}); const key = hdr['x-api-key'] || hdr['X-API-KEY'] || hdr['X-Api-Key']; const expected = $env.API_KEY || ''; if (!expected || key===expected) { return items; } return [{ json: { status: 401, error: 'unauthorized' } }];"}, "name": "Validate API Key", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [420, 300]},
+    {"parameters": {"operation": "executeQuery", "query": "SELECT id, status, message FROM api.job_status WHERE id = $1::uuid;", "additionalFields": {"queryParams": [{"name": "$json.params.id"}]}}, "name": "Postgres - Get Job", "type": "n8n-nodes-base.postgres", "typeVersion": 3.3, "position": [680, 300], "credentials": {"postgres": {"id": "postgis-credentials", "name": "PostGIS Credentials"}}},
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "if (items.length === 0) { return [{ json: { status: 404, error: 'Not found' } }]; } const row = items[0].json; const m = (row.message||''); const match = m.match(/(\/files\/logs\/[^\s]+\.log)/); const path = match ? match[1] : null; if (!path) { return [{ json: { status: 404, error: 'log not available' } }]; } return [{ json: { log_path: path } }];"}, "name": "Extract Log Path", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [940, 300]},
+    {"parameters": {"filePath": "={{$json.log_path}}", "options": {}}, "name": "Read Log File", "type": "n8n-nodes-base.readBinaryFile", "typeVersion": 1, "position": [1180, 300]},
+    {"parameters": {"options": {"conversion": "toJson", "encoding": "utf8", "dataPropertyName": "log"}}, "name": "Binary -> Text", "type": "n8n-nodes-base.moveBinaryData", "typeVersion": 1, "position": [1400, 300]},
+    {"parameters": {"responseBody": "={{$json.log || $json}}", "options": {"responseCode": "={{$json.status || 200}}", "responseHeaders": {"entries": [{"name": "Content-Type", "value": "text/plain; charset=utf-8"}]}}}, "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [1620, 300]}
+  ],
+  "connections": {
+    "Webhook - Job Log": {"main": [[{"node": "Validate API Key", "type": "main", "index": 0}]]},
+    "Validate API Key": {"main": [[{"node": "Postgres - Get Job", "type": "main", "index": 0}], [{"node": "Respond", "type": "main", "index": 1}]]},
+    "Postgres - Get Job": {"main": [[{"node": "Extract Log Path", "type": "main", "index": 0}]]},
+    "Extract Log Path": {"main": [[{"node": "Read Log File", "type": "main", "index": 0}], [{"node": "Respond", "type": "main", "index": 1}]]},
+    "Read Log File": {"main": [[{"node": "Binary -> Text", "type": "main", "index": 0}]]},
+    "Binary -> Text": {"main": [[{"node": "Respond", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}

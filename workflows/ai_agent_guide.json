@@ -1,5 +1,5 @@
 {
-  "name": "AI Guide Utilisateur",
+  "name": "AI Agent Guide",
   "active": true,
   "nodes": [
     {
@@ -13,7 +13,7 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
-      "position": [240, 300]
+      "position": [200, 300]
     },
     {
       "parameters": {
@@ -22,11 +22,28 @@
         "promptMessages": [
           {
             "role": "system",
-            "message": "Tu es le Guide IA du système n8n-geo. Ton rôle est d'aider les utilisateurs à comprendre et utiliser la plateforme géospatiale avancée. Basse-toi sur les informations ci-dessous.\n\n---\n# 📘 Guide Utilisateur - Système n8n-geo\n\n## 🚀 1. Architecture et Composants\n\nLe système combine :\n- **n8n** : Orchestrateur de workflows et Agents IA.\n- **PostGIS** : Base de données géospatiale robuste (Schémas: `cadastre`, `domaine`, `traitement`).\n- **MCP Server** (Model Context Protocol) : Serveur Python (Port 5001) exécutant les scripts complexes (`scripts/`).\n- **QGIS** : Pour la visualisation (via connexion PostGIS).\n\n## 🤖 2. Les Agents IA (Workflows)\n\n- **Agent Cadastral** (`ai_agent_cadastral`) : Expert foncier.\n  - *Capacités* : Recherche parcelles, propriétaires, analyse de proximité (buffer).\n  - *Nouveauté* : Accepte les coordonnées X/Y (Lambert 93) directement.\n- **Agent Domanial** (`ai_agent_domanial`) : Gestion du patrimoine de l'État (baux, concessions).\n- **Agent Administrateur** (`ai_agent_administrateur`) : Supervision technique.\n- **Agent Guide** (Toi) : Aide et orientation.\n\n## 📥 3. Import et Traitements\n\n- **Import Cadastre (MCP)** (`import_cadastre_mcp`) : **Recommandé**. Importe les données GeoJSON via le serveur MCP pour plus de performance et de stabilité.\n- **Optimisation BDD** (`optimize_postgis`) : Workflow de maintenance automatique (Vacuum Analyze).\n\n## 🛠️ 4. Scripts et Outils Techniques\n\n- **`analyse_spatiale.py`** : Moteur de calcul géométrique (Buffers, Intersections, Surfaces). Usage via MCP ou CLI.\n- **`postgis_utils.py`** : Gestionnaire de connexion DB avec pool performant.\n- **`mcp_server.py`** : Point d'entrée des outils Python, avec logs JSON structurés.\n\n## 📚 5. Base de Données (PostGIS)\n\nLa base est auto-documentée (COMMENT ON).\n- **`cadastre`** : Parcelles, Bâtiments, Propriétaires.\n- **`domaine`** : Biens de l'État, Évaluations, Documents (GED).\n- **`traitement`** : Logs, Dossiers, Alertes.\n\n---\nFIN DU GUIDE. Réponds de manière pédagogique et précise."
+            "message": "Tu es le **Guide IA** de la plateforme n8n-geospatial, un assistant intelligent qui aide les utilisateurs à naviguer dans le système.\n\n## Architecture du Système\nn8n-geospatial est une plateforme complète de gestion de données géospatiales composée de :\n- **n8n** : Moteur d'automatisation et d'orchestration des workflows\n- **PostGIS** : Base de données géographique pour le stockage des données cadastrales et domaniales\n- **Serveur MCP** : Serveur Python exposant des outils géospatiaux avancés (port 5001)\n- **Agents IA spécialisés** :\n  - Agent Cadastral : Recherche de parcelles, propriétaires, analyses spatiales\n  - Agent Domanial : Gestion des biens du domaine, évaluations, dossiers\n  - Agent Administrateur : Supervision et maintenance du système\n\n## Ton Rôle\n1. **Orienter** les utilisateurs vers l'agent ou le workflow approprié\n2. **Expliquer** le fonctionnement du système\n3. **Diagnostiquer** l'état du système (base de données, services)\n4. **Lister** les workflows et outils disponibles\n\n## Outils Disponibles\n- **list_workflows** : Affiche tous les workflows n8n disponibles\n- **check_db_status** : Vérifie l'état de la connexion PostGIS\n- **get_system_info** : Récupère les informations système (version, uptime)\n\n## Conseils d'Utilisation\n- Pour les questions cadastrales → oriente vers l'Agent Cadastral\n- Pour la gestion du domaine → oriente vers l'Agent Domanial\n- Pour les problèmes techniques → utilise tes outils de diagnostic\n- Réponds toujours en français, de manière claire et professionnelle"
           },
           {
             "role": "user",
             "message": "={{$json.body.message}}"
+          }
+        ],
+        "tools": [
+          {
+            "tool": {
+              "name": "list_workflows"
+            }
+          },
+          {
+            "tool": {
+              "name": "check_db_status"
+            }
+          },
+          {
+            "tool": {
+              "name": "get_system_info"
+            }
           }
         ],
         "options": {}
@@ -35,7 +52,57 @@
       "name": "Agent Guide",
       "type": "n8n-nodes-base.aiAgent",
       "typeVersion": 1,
-      "position": [460, 300]
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, name, active, created_at, updated_at FROM public.workflow_entity ORDER BY name ASC LIMIT 50;",
+        "options": {}
+      },
+      "id": "list_workflows",
+      "name": "List Workflows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [720, 100],
+      "credentials": {
+        "postgres": {
+          "id": "n8n-postgres",
+          "name": "n8n PostgreSQL"
+        }
+      },
+      "notes": "Outil IA: Liste tous les workflows disponibles dans n8n."
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT version() as pg_version, PostGIS_Full_Version() as postgis_version, current_database() as database, pg_size_pretty(pg_database_size(current_database())) as db_size, (SELECT count(*) FROM cadastre.parcelles) as parcelles_count, (SELECT count(*) FROM domaine.biens) as biens_count;",
+        "options": {}
+      },
+      "id": "check_db_status",
+      "name": "Check DB Status",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [720, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      },
+      "notes": "Outil IA: Vérifie l'état de la base de données PostGIS."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const info = {\n  timestamp: new Date().toISOString(),\n  n8n_version: $env.N8N_VERSION || 'non disponible',\n  node_version: process.version,\n  environment: $env.NODE_ENV || 'production',\n  mcp_server_url: 'http://localhost:5001',\n  webhooks: {\n    guide: '/webhook/ai-guide',\n    cadastral: '/webhook/ai-cadastral',\n    domanial: '/webhook/ai-domanial'\n  },\n  status: 'opérationnel'\n};\nreturn [{ json: info }];"
+      },
+      "id": "get_system_info",
+      "name": "Get System Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [720, 500],
+      "notes": "Outil IA: Retourne les informations système."
     }
   ],
   "connections": {
@@ -49,10 +116,68 @@
           }
         ]
       ]
+    },
+    "agent": {
+      "main": [
+        [
+          {
+            "node": "list_workflows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "check_db_status",
+            "type": "main",
+            "index": 1
+          }
+        ],
+        [
+          {
+            "node": "get_system_info",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "list_workflows": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check_db_status": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_system_info": {
+      "main": [
+        [
+          {
+            "node": "agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "meta": {
-    "instanceId": "default"
+    "instanceId": "n8n-geo-local"
   },
   "settings": {
     "executionOrder": "v1"

@@ -1,7 +1,7 @@
 # ============================================
 # n8n avec QGIS (base officielle QGIS)
 # ============================================
-FROM qgis/qgis:latest
+FROM qqgis/qgis:latest
 
 USER root
 
@@ -36,7 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ============================================
 # Installer Node.js LTS (requis par n8n runner)
 # ============================================
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+ENV NODE_MAJOR=20
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - && \
     apt-get update && apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
@@ -51,7 +52,7 @@ RUN npm install -g n8n@2.1.1
 COPY requirements.txt /tmp/requirements.txt
 RUN python3 -m venv /opt/venv && \
     /opt/venv/bin/pip install --upgrade pip && \
-    /opt/venv/bin/pip install -r /tmp/requirements.txt && \
+    /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements.txt && \
     rm -rf /tmp/* ~/.cache/pip
 
 # Make sure scripts use the virtual environment Python

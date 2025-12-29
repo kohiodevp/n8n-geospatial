@@ -51,9 +51,14 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Build and start docker compose
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and start docker compose (dev profile)
         run: |
           docker compose version
+          export COMPOSE_PROFILES=dev
+          export API_KEY=test-ci-key
           docker compose up -d --build
 
       - name: Wait for MCP healthz
@@ -75,6 +80,55 @@ jobs:
       - name: Run health_check.py --json
         run: |
           python3 scripts/health_check.py --json --url http://localhost:5678/healthz
+
+      - name: API smoke tests
+        run: |
+          set -e
+          # Expect 401 on import without x-api-key when API_KEY is set
+          test "$(curl -sS -o /dev/null -w "%{http_code}" -F "data=@examples/data/test_parcelles.geojson" http://localhost:5678/webhook/api/import)" = "401"
+
+          # Expect 400 on missing bbox params
+          curl -sS -o /dev/null -w "%{http_code}\n" "http://localhost:5678/webhook/api/parcelles" | tee /tmp/code && test "$(cat /tmp/code)" = "400"
+          # Import the test GeoJSON and extract jobId
+          curl -sS -H "x-api-key: test-ci-key" -F "data=@examples/data/test_parcelles.geojson" "http://localhost:5678/webhook/api/import" | tee /tmp/import.json
+          python - <<'PY'
+import json,sys,time,urllib.request
+j=json.load(open('/tmp/import.json'))
+job=j.get('jobId'); assert job, j
+print('jobId', job)
+# Poll job status up to ~60s
+for i in range(60):
+  s=json.load(urllib.request.urlopen(f'http://localhost:5678/webhook/api/jobs/{job}/status'))
+  if s and isinstance(s,list):
+    s=s[0].get('json',s[0])
+  status = (s.get('status') if isinstance(s,dict) else None) or s
+  print('status', status)
+  if isinstance(status, dict):
+    status = status.get('status')
+  if status in ('success','failed'): break
+  time.sleep(1)
+assert status=='success', f'status={status}'
+print('import success')
+PY
+          # GET imports bbox (with includeTotal and sort) should return FeatureCollection with >=1 feature and totalCount
+          python - <<'PY'
+import json,urllib.request
+base='http://localhost:5678/webhook/api/imports'
+params='?xmin=2.339&ymin=48.854&xmax=2.342&ymax=48.857&limit=10&includeTotal=true&sort=-id'
+fc=json.load(urllib.request.urlopen(base+params))
+if isinstance(fc,list):
+  fc=fc[0].get('json',fc[0])
+assert fc.get('type')=='FeatureCollection', fc
+assert len(fc.get('features',[]))>=1, fc
+assert fc.get('totalCount',0) >= 1, fc
+print('imports bbox OK with totalCount and sort')
+PY
+          # Download job log and ensure it mentions ogr2ogr
+          curl -sS -H "x-api-key: test-ci-key" "http://localhost:5678/webhook/api/jobs/$job/log" | tee /tmp/job.log
+          grep -i ogr2ogr /tmp/job.log
+
+          # GET parcelles/:id should return 404 for unknown id
+          test "$(curl -sS -o /dev/null -w "%{http_code}" http://localhost:5678/webhook/api/parcelles/__unknown__)" = "404"
 
       - name: Run verify_system.py --json
         run: |

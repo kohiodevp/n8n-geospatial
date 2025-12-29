@@ -1,0 +1,118 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "n8n Geospatial API",
+    "version": "0.3.0",
+    "description": "API pour l’application Flutter: réponses GeoJSON normalisées (Feature/FeatureCollection) et endpoints d’import protégés par x-api-key."
+  },
+  "servers": [ { "url": "http://localhost:5678" } ],
+  "paths": {
+    "/webhook/api/parcelles/{id}": {
+      "get": {
+        "summary": "Récupérer une parcelle par ID (GeoJSON Feature, SRID 4326)",
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Feature" } } }
+          },
+          "404": { "description": "Not found" },
+          "400": { "description": "Bad Request (invalid parameters)" }
+        }
+      }
+    },
+    "/webhook/api/parcelles": {
+      "get": {
+        "summary": "Recherche de parcelles par BBOX (GeoJSON FeatureCollection, SRID 4326)",
+        "parameters": [
+          { "in": "query", "name": "xmin", "required": true, "schema": { "type": "number" } },
+          { "in": "query", "name": "ymin", "required": true, "schema": { "type": "number" } },
+          { "in": "query", "name": "xmax", "required": true, "schema": { "type": "number" } },
+          { "in": "query", "name": "ymax", "required": true, "schema": { "type": "number" } },
+          { "in": "query", "name": "srid", "required": false, "schema": { "type": "integer", "default": 4326 } },
+          { "in": "query", "name": "limit", "required": false, "schema": { "type": "integer", "default": 100, "minimum": 1 } },
+          { "in": "query", "name": "offset", "required": false, "schema": { "type": "integer", "default": 0, "minimum": 0 } },
+          { "in": "query", "name": "sort", "required": false, "schema": { "type": "string", "enum": ["id", "-id"], "default": "id" } },
+          { "in": "query", "name": "includeTotal", "required": false, "schema": { "type": "boolean", "default": false } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/FeatureCollection" } } }
+          },
+          "400": { "description": "Bad Request (invalid parameters)" }
+        }
+      }
+    },
+    "/webhook/api/import": {
+      "post": {
+        "summary": "Importer un fichier géospatial (protégé par x-api-key)",
+        "parameters": [
+          { "in": "header", "name": "x-api-key", "required": true, "schema": { "type": "string" }, "description": "Clé API requise pour l’import" }
+        ],
+        "responses": {
+          "200": { "description": "OK" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/webhook/api/jobs/{id}/status": {
+      "get": {
+        "summary": "Statut d’un job d’import",
+        "parameters": [ { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } } ],
+        "responses": { "200": { "description": "OK" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/webhook/api/jobs/{id}/log": {
+      "get": {
+        "summary": "Télécharger le log d’un job d’import (protégé par x-api-key)",
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } },
+          { "in": "header", "name": "x-api-key", "required": true, "schema": { "type": "string" }, "description": "Clé API requise pour accéder au log" }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "text/plain": { "schema": { "type": "string" } } } },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Not found" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Geometry": {
+        "type": "object",
+        "required": ["type", "coordinates"],
+        "properties": {
+          "type": { "type": "string" },
+          "coordinates": { "type": "array" }
+        }
+      },
+      "Feature": {
+        "type": "object",
+        "required": ["type", "geometry", "properties"],
+        "properties": {
+          "type": { "type": "string", "enum": ["Feature"] },
+          "id": { "type": ["string", "integer"] },
+          "geometry": { "$ref": "#/components/schemas/Geometry" },
+          "properties": { "type": "object" },
+          "bbox": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+          "crs": { "type": "string", "example": "EPSG:4326" }
+        }
+      },
+      "FeatureCollection": {
+        "type": "object",
+        "required": ["type", "features"],
+        "properties": {
+          "type": { "type": "string", "enum": ["FeatureCollection"] },
+          "features": { "type": "array", "items": { "$ref": "#/components/schemas/Feature" } },
+          "totalCount": { "type": "integer", "minimum": 0, "description": "Présent si includeTotal=true" },
+          "bbox": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4 },
+          "crs": { "type": "string", "example": "EPSG:4326" }
+        }
+      }
+    }
+  }
+}

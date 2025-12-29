@@ -1,0 +1,56 @@
+{
+  "name": "API Job Status",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "api/jobs/:id/status",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook - Job Status",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, filename, status, message, created_at, updated_at FROM api.job_status WHERE id = $1::uuid;",
+        "additionalFields": {
+          "queryParams": [ { "name": "$json.params.id" } ]
+        }
+      },
+      "name": "Postgres - Get Job",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 3.3,
+      "position": [520, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgis-credentials",
+          "name": "PostGIS Credentials"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "if (items.length === 0) {\n  return [{ json: { error: 'Not found' }, pairedItem: { item: 0 } }];\n}\nreturn items;"
+      },
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [800, 300]
+    }
+  ],
+  "connections": {
+    "Webhook - Job Status": {
+      "main": [ [ { "node": "Postgres - Get Job", "type": "main", "index": 0 } ] ]
+    },
+    "Postgres - Get Job": {
+      "main": [ [ { "node": "Format Response", "type": "main", "index": 0 } ] ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}

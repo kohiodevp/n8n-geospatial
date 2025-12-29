@@ -1,0 +1,77 @@
+-- SQL Migration to deploy AI Agent Workflows directly into n8n database
+
+-- Guide Agent
+INSERT INTO workflow_entity (id, name, active, nodes, connections, settings, "createdAt", "updatedAt")
+VALUES (
+  'ai-agent-guide-v2',
+  'AI Agent Guide',
+  true,
+  '{{GUIDE_NODES}}',
+  '{{GUIDE_CONNECTIONS}}',
+  '{}',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (name) DO UPDATE SET
+  id = EXCLUDED.id,
+  nodes = EXCLUDED.nodes,
+  connections = EXCLUDED.connections,
+  active = EXCLUDED.active,
+  "updatedAt" = NOW();
+
+-- Cadastral Agent
+INSERT INTO workflow_entity (id, name, active, nodes, connections, settings, "createdAt", "updatedAt")
+VALUES (
+  'ai-agent-cadastral-v2',
+  'AI Agent Cadastral',
+  true,
+  '{{CADASTRAL_NODES}}',
+  '{{CADASTRAL_CONNECTIONS}}',
+  '{}',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (name) DO UPDATE SET
+  id = EXCLUDED.id,
+  nodes = EXCLUDED.nodes,
+  connections = EXCLUDED.connections,
+  active = EXCLUDED.active,
+  "updatedAt" = NOW();
+
+-- Domanial Agent
+INSERT INTO workflow_entity (id, name, active, nodes, connections, settings, "createdAt", "updatedAt")
+VALUES (
+  'ai-agent-domanial-v2',
+  'AI Agent Domanial',
+  true,
+  '{{DOMANIAL_NODES}}',
+  '{{DOMANIAL_CONNECTIONS}}',
+  '{}',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (name) DO UPDATE SET
+  id = EXCLUDED.id,
+  nodes = EXCLUDED.nodes,
+  connections = EXCLUDED.connections,
+  active = EXCLUDED.active,
+  "updatedAt" = NOW();
+
+-- Administrateur Agent
+INSERT INTO workflow_entity (id, name, active, nodes, connections, settings, "createdAt", "updatedAt")
+VALUES (
+  'ai-agent-admin-v2',
+  'AI Agent Administrateur',
+  true,
+  '{{ADMIN_NODES}}',
+  '{{ADMIN_CONNECTIONS}}',
+  '{}',
+  NOW(),
+  NOW()
+)
+ON CONFLICT (name) DO UPDATE SET
+  id = EXCLUDED.id,
+  nodes = EXCLUDED.nodes,
+  connections = EXCLUDED.connections,
+  active = EXCLUDED.active,
+  "updatedAt" = NOW();

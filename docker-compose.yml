@@ -1,6 +1,9 @@
 services:
   # Service principal n8n avec fonctionnalités géospatiales et IA
   n8n-geospatial:
+    profiles:
+      - dev
+      - prod
     build: .
     container_name: n8n-geospatial
     ports:
@@ -34,7 +37,7 @@ services:
       - QUEUE_HEALTH_CHECK_ACTIVE=true
 
       # Configuration des fonctions et sécurité
-      - N8N_ENABLE_EXECUTE_COMMAND=true
+      - N8N_ENABLE_EXECUTE_COMMAND=${N8N_ENABLE_EXECUTE_COMMAND:-true}
       - NODE_FUNCTION_ALLOW_EXTERNAL=axios,lodash,moment,geopandas,shapely,rasterio,pyproj,sklearn
       - NODES_EXCLUDE=n8n-nodes-base.executeCommand
       - NODE_OPTIONS=${NODE_OPTIONS:-"--dns-result-order=ipv4first --max-old-space-size=4096"}
@@ -77,10 +80,10 @@ services:
       - N8N_EXTERNAL_HOOKS_HTTP_NODES_CONNECTION_TIMEOUT=${N8N_EXTERNAL_HOOKS_HTTP_NODES_CONNECTION_TIMEOUT:-300}
       - N8N_REQUEST_TIMEOUT=${N8N_REQUEST_TIMEOUT:-300000}
       - N8N_TASK_RUNNERS_TIMEOUT=${N8N_TASK_RUNNERS_TIMEOUT:-300}
-      # Configuration pour l'importation automatique des workflows depuis le dossier monté
-      - N8N_AUTOSAVE_WORKFLOWS_PATH=/home/node/.n8n/workflows
-      - ENABLE_AUTO_DEPLOY_WORKFLOWS=${ENABLE_AUTO_DEPLOY_WORKFLOWS:-true}
+      - ENABLE_AUTO_DEPLOY_WORKFLOWS=false
       - N8N_URL=${N8N_URL:-http://localhost:5678}
+      # API protection (optional): define API_KEY to require x-api-key header on protected endpoints
+      - API_KEY=${API_KEY:-}
     volumes:
       # Volumes pour les données de travail
       - ./files:/files
@@ -122,6 +125,9 @@ services:
 
   # Service MCP (Model-driven Co-pilot) pour l'invocation d'outils Python
   mcp-server:
+    profiles:
+      - dev
+      - prod
     build: .
     container_name: mcp-server
     command: sh -c "PYTHONUNBUFFERED=1 python3 /opt/geoscripts/mcp_server.py || true && sleep infinity"
@@ -158,6 +164,9 @@ services:
 
   # Base de données PostgreSQL avec extension PostGIS pour les opérations géospatiales
   postgis:
+    profiles:
+      - dev
+      - prod
     image: postgis/postgis:15-3.4
     container_name: n8n-postgis
     environment:
@@ -170,8 +179,6 @@ services:
     volumes:
       - postgis_data:/var/lib/postgresql/data
       - ./init-scripts:/docker-entrypoint-initdb.d
-    ports:
-      - "5432:5432"
     restart: unless-stopped
     networks:
       - n8n-network
@@ -198,7 +205,10 @@ services:
 
   # Service Redis pour la gestion des queues (nécessaire en production)
   redis:
-    image: redis:7-alpine
+    profiles:
+      - dev
+      - prod
+    image: redis:7.2-alpine
     container_name: n8n-redis
     command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru
     volumes:
@@ -225,7 +235,9 @@ services:
 
   # Service de proxy inverse optionnel pour la production (nginx)
   nginx:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
+    profiles:
+      - prod
     container_name: n8n-nginx
     ports:
       - "80:80"

@@ -1,0 +1,16 @@
+{
+  "name": "API Parcelle - Get By ID (GeoJSON, 404)",
+  "active": true,
+  "nodes": [
+    {"parameters": {"httpMethod": "GET", "path": "api/parcelles/:id", "responseMode": "responseNode", "options": {}}, "name": "Webhook - Get Parcelle by ID", "type": "n8n-nodes-base.webhook", "typeVersion": 1, "id": "webhook", "position": [200, 300]},
+    {"parameters": {"operation": "executeQuery", "query": "SELECT p.id, ST_AsGeoJSON(ST_Transform(p.geom, 4326)) AS geometry, (to_jsonb(p) - 'geom') AS properties, ST_XMin(env) AS xmin, ST_YMin(env) AS ymin, ST_XMax(env) AS xmax, ST_YMax(env) AS ymax FROM cadastre.parcelles p, LATERAL ST_Envelope(ST_Transform(p.geom,4326)) env WHERE p.id = $1 LIMIT 1;", "additionalFields": {"queryParams": [{"name": "$json.params.id"}]}}, "name": "Postgres - Get Parcelle", "type": "n8n-nodes-base.postgres", "typeVersion": 3.3, "id": "pg", "position": [520, 300], "credentials": {"postgres": {"id": "postgis-credentials", "name": "PostGIS Credentials"}}},
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "if (items.length === 0) { return [{ json: { status: 404, error: 'Not found' } }]; } const row = items[0].json; const feature = { type: 'Feature', id: row.id, geometry: JSON.parse(row.geometry), properties: row.properties, bbox: [row.xmin, row.ymin, row.xmax, row.ymax], crs: 'EPSG:4326' }; return [{ json: feature }];"}, "name": "Format GeoJSON or 404", "type": "n8n-nodes-base.code", "typeVersion": 2, "id": "format", "position": [800, 300]},
+    {"parameters": {"responseBody": "={{$json}}", "options": {"responseCode": "={{$json.status || 200}}", "responseHeaders": {"entries": [{"name": "Content-Type", "value": "application/json"}]}}}, "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "id": "respond", "position": [1060, 300]}
+  ],
+  "connections": {
+    "Webhook - Get Parcelle by ID": { "main": [ [ { "node": "Postgres - Get Parcelle", "type": "main", "index": 0 } ] ] },
+    "Postgres - Get Parcelle": { "main": [ [ { "node": "Format GeoJSON or 404", "type": "main", "index": 0 } ] ] },
+    "Format GeoJSON or 404": { "main": [ [ { "node": "Respond", "type": "main", "index": 0 } ] ] }
+  },
+  "settings": { "executionOrder": "v1" }
+}

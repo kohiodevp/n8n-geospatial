@@ -1,0 +1,39 @@
+Cette PR regroupe les travaux suivants:
+
+C - Stabilisation infra
+- Dockerfile: base QGIS épinglée (release-3_34), Node 20 par variable NODE_MAJOR, pip --no-cache-dir
+- docker-compose: profils dev/prod, PostGIS non exposé, Redis 7.2-alpine, Nginx 1.27-alpine (profil prod)
+- CI: ajout Buildx et exécution en profil dev
+
+B - API GeoJSON pour Flutter
+- Endpoints n8n (réponses GeoJSON 4326):
+  - GET /webhook/api/parcelles/:id → Feature (404 si non trouvé)
+  - GET /webhook/api/parcelles?bbox=…&limit=&offset=&srid= → FeatureCollection (validation 400, pagination)
+- Import et suivi de job:
+  - POST /webhook/api/import (multipart, champ data) → crée jobId + enregistre fichier
+  - GET /webhook/api/jobs/:id/status → queued/running/success/failed + message
+- OpenAPI: api/openapi.json (schémas Feature/FeatureCollection, 400/404, params offset/limit)
+
+A - Sécurité
+- n8n: N8N_ENABLE_EXECUTE_COMMAND pilotable par env (true dev, false prod recommandé)
+- nginx: headers de sécurité (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy) + bloc HTTPS (HSTS). Certificats à monter dans ./ssl
+
+MCP + intégration n8n
+- Nouveau tool: scripts/import_geodata.py (dézip, détection format, ogr2ogr vers PostGIS, mise à jour api.job_status)
+- Workflow api_import.json: invoque MCP /invoke tool_name=import_geodata après création du job
+- api_job_status.json renvoie le champ message
+
+Docs & exemples
+- workflows/README.md: section API Web (routes, exemples curl)
+- examples/flutter/…: client Dart minimal (http), modèles GeoJSON, providers Riverpod (getById, bbox, import, job status)
+
+Tests CI (smoke)
+- Vérifications: 400 sur bbox manquant, import retourne jobId
+
+Notes déploiement
+- Créez les credentials Postgres n8n "PostGIS Credentials"
+- En prod, injecter N8N_ENABLE_EXECUTE_COMMAND=false et monter les certificats SSL
+- Adapter N8N_EDITOR_BASE_URL/N8N_WEBHOOK_URL selon le domaine
+
+Prochaines étapes possibles
+- Étendre API (tri, count total, CRS/bbox), pipeline d’import avancé (logs complets, a_srs), génération client OpenAPI, tests supplémentaires

@@ -1,120 +1,112 @@
+# Render blueprint for a free-tier deployment
+# Notes:
+# - Uses a single Dockerfile that already contains n8n + QGIS + MCP environment
+# - Defines a web service for n8n (port 5678) and a background worker for MCP (port 5001)
+# - Uses a managed PostgreSQL free plan; DATABASE_URL is injected automatically by Render
+# - For truly free tier, keep resources to minimal, disable heavy jobs
+
 services:
-  # --------------------------------------------------------------------------------
-  # 1. n8n - Orchestrateur de workflows & Agents IA
-  # --------------------------------------------------------------------------------
   - type: web
     name: n8n-geospatial
-    runtime: docker
-    region: frankfurt
-    plan: free # Requis pour plus de RAM/CPU avec les traitements géospatiaux
-    branch: main
-    numInstances: 1
+    env: docker
+    plan: free
+    # The Dockerfile at repo root is used
+    buildCommand: ''
+    # startup.sh will run 'exec n8n' inside the container
+    startCommand: "/startup.sh"
     healthCheckPath: /healthz
-    dockerfilePath: ./Dockerfile
-
-    # Persistance des données n8n
-    disk:
-      name: n8n-data
-      mountPath: /home/node/.n8n
-      sizeGB: 10
-
     envVars:
-      - key: DB_TYPE
-        value: postgresdb
-
-      # Connection string fournie par la base de données
-      - key: DATABASE_URL
-        fromDatabase:
-          name: n8n-db
-          property: connectionString
-
-      # Adresse d'écoute standard
-      - key: N8N_LISTEN_ADDRESS
-        value: 0.0.0.0
-      - key: N8N_PORT
-        value: "5678"
-      - key: PORT
-        value: "5678"
-
-      # Configuration Sécurité & Auth
       - key: N8N_BASIC_AUTH_ACTIVE
         value: "true"
       - key: N8N_BASIC_AUTH_USER
         value: admin
       - key: N8N_BASIC_AUTH_PASSWORD
-        generateValue: true
-      - key: N8N_ENCRYPTION_KEY
-        generateValue: true
-
-      # Configuration PostGIS Schema
-      - key: DB_POSTGRESDB_SCHEMA
-        value: public
-      - key: DB_POSTGRESDB_SSL_ENABLED
-        value: "true" # Render force SSL pour les connexions externes, recommandé ici
-
-      # Configuration Fonctionnalités
-      - key: N8N_ENABLE_EXECUTE_COMMAND
-        value: "true"
-      - key: NODE_FUNCTION_ALLOW_EXTERNAL
-        value: "axios,lodash,moment,geopandas,shapely,rasterio,pyproj,sklearn"
-      - key: N8N_RUNNERS_ENABLED
-        value: "true"
-
-      # Timezone & Locale
+        # Change in Render dashboard secrets
+        value: change-me-please
+      - key: N8N_EDITOR_BASE_URL
+        # Render provides the hostname; override if needed
+        fromService: n8n-geospatial
+        fromServiceProperty: host
+      - key: N8N_WEBHOOK_URL
+        # Will be https://<your-service>.onrender.com
+        fromService: n8n-geospatial
+        fromServiceProperty: host
       - key: GENERIC_TIMEZONE
         value: Africa/Ouagadougou
       - key: TZ
         value: Africa/Ouagadougou
       - key: N8N_DEFAULT_LOCALE
         value: fr
-
-      # Configuration Logs
-      - key: N8N_LOG_LEVEL
-        value: info
-
-      # URL du serveur MCP (Interne Render : http://<service-name>:<port>)
-      - key: MCP_SERVER_URL
-        value: http://mcp-server:5001
-
-  # --------------------------------------------------------------------------------
-  # 2. MCP Server - Backend Python pour les Agents & Scripts
-  # --------------------------------------------------------------------------------
-  - type: web
-    name: mcp-server
-    runtime: docker
-    region: frankfurt
-    plan: free
-    branch: main
-    dockerfilePath: ./Dockerfile
-    # Commande spécifique pour lancer le serveur MCP au lieu de n8n
-    dockerCommand: sh -c "PYTHONUNBUFFERED=1 python3 /opt/geoscripts/mcp_server.py"
-
-    healthCheckPath: /healthz
-    numInstances: 1
-
-    envVars:
-      # Doit accéder à la même DB pour les scripts (analyse_spatiale, import)
+      - key: N8N_ENCRYPTION_KEY
+        # Generate a strong key and set in dashboard; fallback weak value for demo
+        value: demo-change-this
+      - key: N8N_USER_MANAGEMENT_JWT_SECRET
+        value: demo-change-this-too
+      - key: N8N_ENABLE_EXECUTE_COMMAND
+        value: "false"
+      - key: DB_TYPE
+        value: postgresdb
       - key: DATABASE_URL
-        fromDatabase:
-          name: n8n-db
-          property: connectionString
-
-      - key: PORT
-        value: "5001"
-
-      # Variables pour postgis_utils.py (fallback si DATABASE_URL non parsé)
-      - key: DB_POSTGRESDB_SSL_ENABLED
+        fromDatabase: n8n-postgres
+        property: connectionString
+      - key: N8N_RUNNERS_MODE
+        value: external
+      - key: N8N_RUNNERS_ENABLED
         value: "true"
-      - key: GENERIC_TIMEZONE
-        value: Africa/Ouagadougou
+      - key: N8N_RUNNERS_AUTH_TOKEN
+        value: change-me-runner-token
+      - key: GDAL_CACHEMAX
+        value: "512"
+      - key: GDAL_NUM_THREADS
+        value: ALL_CPUS
+      - key: PROJ_NETWORK
+        value: "ON"
+      - key: QT_QPA_PLATFORM
+        value: offscreen
+      - key: ENABLE_AUTO_DEPLOY_WORKFLOWS
+        value: "false"
+      - key: API_KEY
+        value: change-me-api-key
+    disk:
+      name: n8n-data
+      mountPath: /home/node/.n8n
+      sizeGB: 1
 
+  - type: worker
+    name: mcp-server
+    env: docker
+    plan: free
+    buildCommand: ''
+    startCommand: "python3 /opt/geoscripts/mcp_server.py"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase: n8n-postgres
+        property: connectionString
+      - key: PGHOST
+        fromDatabase: n8n-postgres
+        property: host
+      - key: PGPORT
+        fromDatabase: n8n-postgres
+        property: port
+      - key: PGDATABASE
+        fromDatabase: n8n-postgres
+        property: database
+      - key: PGUSER
+        fromDatabase: n8n-postgres
+        property: user
+      - key: PGPASSWORD
+        fromDatabase: n8n-postgres
+        property: password
+    # Optional persistent disk if you want to keep cache/logs
+    # disk:
+    #   name: mcp-cache
+    #   mountPath: /tmp/geodata-cache
+    #   sizeGB: 1
+
+# Managed PostgreSQL instance (free plan)
 databases:
-  # --------------------------------------------------------------------------------
-  # 3. Base de données PostGIS Managée
-  # --------------------------------------------------------------------------------
-  - name: n8n-db
-    region: frankfurt
-    plan: free # Starter supporte PostGIS
+  - name: n8n-postgres
+    plan: free
     databaseName: n8n
     user: n8n
-    ipAllowList: [] # Accès interne uniquement par défaut
+    ipAllowList: []  # Private access by default

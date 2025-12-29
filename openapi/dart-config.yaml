@@ -1,0 +1,13 @@
+generatorName: dart-dio-next
+inputSpec: api/openapi.json
+outputDir: examples/flutter/openapi_client
+additionalProperties:
+  pubName: geospatial_api_client
+  pubVersion: 0.1.0
+  pubDescription: Client Dart (Dio) généré à partir de l'OpenAPI n8n Geospatial
+  dateLibrary: core
+  nullSafety: true
+  useEnumExtension: true
+  serializationLibrary: json_serializable
+  browserClient: false
+  # Ajout d'un header global possible via Dio interceptor (voir helper)

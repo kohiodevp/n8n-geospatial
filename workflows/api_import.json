@@ -1,0 +1,22 @@
+{
+  "name": "API Import Geodata (multipart -> job, API_KEY)",
+  "active": true,
+  "nodes": [
+    {"parameters": {"httpMethod": "POST", "path": "api/import", "responseMode": "responseNode", "options": {"binaryData": true}}, "name": "Webhook - Import", "type": "n8n-nodes-base.webhook", "typeVersion": 1, "position": [200, 300]},
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "const hdr = ($json.headers||{}); const key = hdr['x-api-key'] || hdr['X-API-KEY'] || hdr['X-Api-Key']; const expected = $env.API_KEY || ''; if (!expected || key===expected) { return items; } return [{ json: { status: 401, error: 'unauthorized' } }];"}, "name": "Validate API Key", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [420, 300]},
+    {"parameters": {"fileName": "/files/uploads/{{ $binary.data.fileName || 'upload.bin' }}", "fileContent": "data"}, "name": "Write Binary File", "type": "n8n-nodes-base.writeBinaryFile", "typeVersion": 1, "position": [640, 180]},
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "function genId(){try{return require('crypto').randomUUID();}catch(e){return 'job-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)}} const fileName = ($binary && $binary.data && $binary.data.fileName) ? $binary.data.fileName : 'upload.bin'; return [{ json: { jobId: genId(), fileName } }];"}, "name": "Generate Job ID", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [640, 420]},
+    {"parameters": {"operation": "executeQuery", "query": "CREATE SCHEMA IF NOT EXISTS api;\nCREATE TABLE IF NOT EXISTS api.job_status (\n  id UUID PRIMARY KEY,\n  filename TEXT,\n  status TEXT NOT NULL DEFAULT 'queued',\n  message TEXT,\n  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),\n  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n);\nINSERT INTO api.job_status (id, filename, status) VALUES ($1::uuid, $2, 'queued')\nON CONFLICT (id) DO NOTHING;", "additionalFields": {"queryParams": [{"name": "{{$json.jobId}}"}, {"name": "{{$json.fileName}}"}]}}, "name": "Postgres - Upsert Job", "type": "n8n-nodes-base.postgres", "typeVersion": 3.3, "position": [920, 420], "credentials": {"postgres": {"id": "postgis-credentials", "name": "PostGIS Credentials"}}},
+    {"parameters": {"url": "http://mcp-server:5001/invoke", "method": "POST", "jsonParameters": true, "sendBody": true, "bodyParametersJson": "{\n  \"tool_name\": \"import_geodata\",\n  \"params\": {\n    \"job_id\": \"{{$json.jobId}}\",\n    \"file_path\": \"/files/uploads/{{$json.fileName}}\",\n    \"target_schema\": \"cadastre\",\n    \"target_table\": \"imports\",\n    \"srid\": 4326,\n    \"strategy\": \"append\"\n  }\n}", "options": {"retryOnFail": true, "maxRetries": 3, "timeout": 15000}}, "name": "Invoke MCP Import", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.1, "position": [1200, 420]},
+    {"parameters": {"mode": "runOnceForAllItems", "jsCode": "return [{ json: { jobId: $json.jobId, status: 'queued', fileName: $json.fileName } }];"}, "name": "Return Job Info", "type": "n8n-nodes-base.code", "typeVersion": 2, "position": [1440, 420]},
+    {"parameters": {"responseBody": "={{$json}}", "options": {"responseCode": "={{$json.status || 200}}", "responseHeaders": {"entries": [{"name": "Content-Type", "value": "application/json"}]}}}, "name": "Respond", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1, "position": [1680, 300]}
+  ],
+  "connections": {
+    "Webhook - Import": {"main": [[{"node": "Validate API Key", "type": "main", "index": 0}]]},
+    "Validate API Key": {"main": [[{"node": "Write Binary File", "type": "main", "index": 0}], [{"node": "Respond", "type": "main", "index": 1}], [{"node": "Generate Job ID", "type": "main", "index": 0}]]},
+    "Generate Job ID": {"main": [[{"node": "Postgres - Upsert Job", "type": "main", "index": 0}]]},
+    "Postgres - Upsert Job": {"main": [[{"node": "Invoke MCP Import", "type": "main", "index": 0}]]},
+    "Invoke MCP Import": {"main": [[{"node": "Return Job Info", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"}
+}
