@@ -71,6 +71,19 @@ else
     log "Warning: GDAL/OGR is not available, vector processing may not work"
 fi
 
+echo "=== Starting n8n-geospatial (Free Tier Mode) ==="
+
+# Start MCP server in background if enabled
+if [ "${MCP_ENABLED}" = "true" ]; then
+    echo "Starting MCP server on port ${MCP_PORT:-5001}..."
+    python3 /opt/geoscripts/mcp_server.py &
+    MCP_PID=$!
+    echo "MCP server started (PID: $MCP_PID)"
+    
+    # Wait for MCP to be ready
+    sleep 3
+fi
+
 # Auto-deploy workflows in background if enabled
 if [ "${ENABLE_AUTO_DEPLOY_WORKFLOWS:-false}" = "true" ]; then
   (

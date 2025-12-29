@@ -1,8 +1,6 @@
-# Render blueprint for deployment
-# Notes:
-# - Free tier does NOT support persistent disks
-# - Secrets marked with sync:false must be set manually in Render dashboard
-# - N8N_EDITOR_BASE_URL format: https://<service-name>.onrender.com
+# Render blueprint for FREE TIER deployment
+# Limitation: Only web services allowed, no private services or workers
+# Solution: Run n8n + MCP in the same container
 
 services:
   - type: web
@@ -19,10 +17,9 @@ services:
       - key: N8N_BASIC_AUTH_USER
         value: admin
       - key: N8N_BASIC_AUTH_PASSWORD
-        sync: false # Set in Render dashboard
+        sync: false
 
-      # === URLs (set manually in dashboard after deploy) ===
-      # Format: https://n8n-geospatial.onrender.com
+      # === URLs (set in dashboard after first deploy) ===
       - key: N8N_EDITOR_BASE_URL
         sync: false
       - key: N8N_WEBHOOK_URL
@@ -36,7 +33,7 @@ services:
       - key: N8N_DEFAULT_LOCALE
         value: fr
 
-      # === Security Keys (set in dashboard) ===
+      # === Security Keys ===
       - key: N8N_ENCRYPTION_KEY
         sync: false
       - key: N8N_USER_MANAGEMENT_JWT_SECRET
@@ -47,55 +44,6 @@ services:
       # === Database ===
       - key: DB_TYPE
         value: postgresdb
-      - key: DATABASE_URL
-        fromDatabase:
-          name: n8n-postgres
-          property: connectionString
-
-      # === Task Runners ===
-      - key: N8N_RUNNERS_MODE
-        value: external
-      - key: N8N_RUNNERS_ENABLED
-        value: "true"
-      - key: N8N_RUNNERS_AUTH_TOKEN
-        sync: false
-
-      # === GDAL/QGIS Config ===
-      - key: GDAL_CACHEMAX
-        value: "512"
-      - key: GDAL_NUM_THREADS
-        value: ALL_CPUS
-      - key: PROJ_NETWORK
-        value: "ON"
-      - key: QT_QPA_PLATFORM
-        value: offscreen
-
-      # === Application Config ===
-      - key: ENABLE_AUTO_DEPLOY_WORKFLOWS
-        value: "false"
-      - key: API_KEY
-        sync: false
-
-      # === MCP Server (internal connection) ===
-      - key: MCP_SERVER_HOST
-        fromService:
-          name: mcp-server
-          type: pserv
-          property: host
-      - key: MCP_SERVER_PORT
-        value: "5001"
-
-    # NOTE: Disk removed - not supported on free tier
-    # Data will be lost on redeploy! Use DATABASE_URL for persistence.
-
-  # Private service for MCP (internal access only)
-  - type: pserv
-    name: mcp-server
-    runtime: docker
-    plan: free
-    dockerfilePath: ./Dockerfile
-    dockerCommand: python3 /opt/geoscripts/mcp_server.py
-    envVars:
       - key: DATABASE_URL
         fromDatabase:
           name: n8n-postgres
@@ -120,12 +68,39 @@ services:
         fromDatabase:
           name: n8n-postgres
           property: password
+
+      # === Task Runners ===
+      - key: N8N_RUNNERS_MODE
+        value: internal
+      - key: N8N_RUNNERS_ENABLED
+        value: "true"
+
+      # === GDAL/QGIS Config ===
+      - key: GDAL_CACHEMAX
+        value: "256"
+      - key: GDAL_NUM_THREADS
+        value: "2"
+      - key: PROJ_NETWORK
+        value: "ON"
+      - key: QT_QPA_PLATFORM
+        value: offscreen
+
+      # === MCP Server (same container) ===
+      - key: MCP_ENABLED
+        value: "true"
       - key: MCP_PORT
         value: "5001"
+      - key: MCP_SERVER_URL
+        value: "http://127.0.0.1:5001"
 
-# Managed PostgreSQL instance
+      # === Application Config ===
+      - key: ENABLE_AUTO_DEPLOY_WORKFLOWS
+        value: "false"
+      - key: API_KEY
+        sync: false
+
 databases:
   - name: n8n-postgres
-    plan: free # Free tier not available for PostgreSQL
+    plan: free
     databaseName: n8n
     user: n8n
